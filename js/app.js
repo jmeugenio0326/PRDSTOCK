@@ -99,6 +99,15 @@ const cancelRenameUnitBtn = document.getElementById('cancelRenameUnitBtn');
 const logsTableBody = document.getElementById('logsTableBody');
 const logSearchInput = document.getElementById('logSearchInput');
 
+// DOM Elements - Property & Equipment Details
+const hasPropertyNoToggle = document.getElementById('hasPropertyNoToggle');
+const propertyFieldsContainer = document.getElementById('propertyFieldsContainer');
+const stockPropertyNoInput = document.getElementById('stockPropertyNo');
+const hasOwnerToggle = document.getElementById('hasOwnerToggle');
+const ownerFieldContainer = document.getElementById('ownerFieldContainer');
+const stockOwnerInput = document.getElementById('stockOwner');
+const clearStockFormBtn = document.getElementById('clearStockFormBtn');
+
 // Subtabs - Categories vs Units
 const tabSubBtnCategories = document.getElementById('tabSubBtnCategories');
 const tabSubBtnUnits = document.getElementById('tabSubBtnUnits');
@@ -1417,22 +1426,171 @@ function updateDashboard() {
   refreshIcons();
 }
 
-window.quickRestockItem = function(key) {
-  const item = inventoryData[key];
+// ==========================================
+// 8. FORM POPULATION & RESET HELPERS
+// ==========================================
+function resetStockForm() {
+  stockForm.reset();
+  if (hasPropertyNoToggle) hasPropertyNoToggle.checked = false;
+  if (propertyFieldsContainer) propertyFieldsContainer.classList.add('hidden');
+  if (stockPropertyNoInput) {
+    stockPropertyNoInput.removeAttribute('required');
+    stockPropertyNoInput.value = '';
+  }
+  if (hasOwnerToggle) hasOwnerToggle.checked = false;
+  if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
+  if (stockOwnerInput) stockOwnerInput.value = '';
+
+  const defaultCondition = document.querySelector('input[name="itemCondition"][value="A1"]');
+  if (defaultCondition) defaultCondition.checked = true;
+
+  const inRadio = document.querySelector('input[name="actionType"][value="IN"]');
+  if (inRadio) inRadio.checked = true;
+
+  refreshIcons();
+}
+
+function populateStockFormWithItem(item, action = 'IN') {
   if (!item) return;
   document.querySelector('[data-target="tabForm"]').click();
   document.getElementById('stockItemName').value = item.name;
   stockCategorySelect.value = item.category;
-  document.getElementById('stockUnit').value = item.unit || 'pcs';
-  const radio = document.querySelector('input[name="actionType"][value="IN"]');
+  const unitEl = document.getElementById('stockUnit');
+  if (unitEl) unitEl.value = item.unit || 'pcs';
+
+  const radio = document.querySelector(`input[name="actionType"][value="${action}"]`);
   if (radio) radio.checked = true;
+
   document.getElementById('stockQuantity').value = '';
+
+  if (item.propertyNo) {
+    if (hasPropertyNoToggle) hasPropertyNoToggle.checked = true;
+    if (propertyFieldsContainer) propertyFieldsContainer.classList.remove('hidden');
+    if (stockPropertyNoInput) {
+      stockPropertyNoInput.setAttribute('required', 'true');
+      stockPropertyNoInput.value = item.propertyNo;
+    }
+
+    if (item.owner) {
+      if (hasOwnerToggle) hasOwnerToggle.checked = true;
+      if (ownerFieldContainer) ownerFieldContainer.classList.remove('hidden');
+      if (stockOwnerInput) stockOwnerInput.value = item.owner;
+    } else {
+      if (hasOwnerToggle) hasOwnerToggle.checked = false;
+      if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
+      if (stockOwnerInput) stockOwnerInput.value = '';
+    }
+
+    if (item.condition) {
+      const condRadio = document.querySelector(`input[name="itemCondition"][value="${item.condition}"]`);
+      if (condRadio) condRadio.checked = true;
+    }
+  } else {
+    if (hasPropertyNoToggle) hasPropertyNoToggle.checked = false;
+    if (propertyFieldsContainer) propertyFieldsContainer.classList.add('hidden');
+    if (stockPropertyNoInput) {
+      stockPropertyNoInput.removeAttribute('required');
+      stockPropertyNoInput.value = '';
+    }
+    if (hasOwnerToggle) hasOwnerToggle.checked = false;
+    if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
+    if (stockOwnerInput) stockOwnerInput.value = '';
+  }
+
   document.getElementById('stockQuantity').focus();
   refreshIcons();
+}
+
+window.quickRestockItem = function(key) {
+  const item = inventoryData[key];
+  populateStockFormWithItem(item, 'IN');
 };
 
+window.openQuickAdjustment = function(itemKey) {
+  const item = inventoryData[itemKey];
+  populateStockFormWithItem(item, 'IN');
+};
+
+// Wire Property No. Toggle Switch
+if (hasPropertyNoToggle) {
+  hasPropertyNoToggle.addEventListener('change', () => {
+    if (hasPropertyNoToggle.checked) {
+      if (propertyFieldsContainer) propertyFieldsContainer.classList.remove('hidden');
+      if (stockPropertyNoInput) {
+        stockPropertyNoInput.setAttribute('required', 'true');
+        setTimeout(() => stockPropertyNoInput.focus(), 80);
+      }
+    } else {
+      if (propertyFieldsContainer) propertyFieldsContainer.classList.add('hidden');
+      if (stockPropertyNoInput) {
+        stockPropertyNoInput.removeAttribute('required');
+        stockPropertyNoInput.value = '';
+      }
+      if (hasOwnerToggle) hasOwnerToggle.checked = false;
+      if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
+      if (stockOwnerInput) stockOwnerInput.value = '';
+
+      const defaultCondition = document.querySelector('input[name="itemCondition"][value="A1"]');
+      if (defaultCondition) defaultCondition.checked = true;
+    }
+    refreshIcons();
+  });
+}
+
+// Wire Owner / Custodian Toggle Switch
+if (hasOwnerToggle) {
+  hasOwnerToggle.addEventListener('change', () => {
+    if (hasOwnerToggle.checked) {
+      if (ownerFieldContainer) ownerFieldContainer.classList.remove('hidden');
+      if (stockOwnerInput) setTimeout(() => stockOwnerInput.focus(), 80);
+    } else {
+      if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
+      if (stockOwnerInput) stockOwnerInput.value = '';
+    }
+    refreshIcons();
+  });
+}
+
+// Wire Clear Form Button
+if (clearStockFormBtn) {
+  clearStockFormBtn.addEventListener('click', () => {
+    resetStockForm();
+    showToast('Stock form fields and toggles cleared.', 'info', 'Form Cleared');
+  });
+}
+
+// Auto-fill form if existing item name is typed/selected
+const stockItemNameField = document.getElementById('stockItemName');
+if (stockItemNameField) {
+  stockItemNameField.addEventListener('input', () => {
+    const val = stockItemNameField.value.trim().toLowerCase();
+    if (!val) return;
+    const match = Object.values(inventoryData).find(i => i.name.toLowerCase() === val);
+    if (match) {
+      if (stockCategorySelect && match.category) stockCategorySelect.value = match.category;
+      const unitEl = document.getElementById('stockUnit');
+      if (unitEl && match.unit) unitEl.value = match.unit;
+      if (match.propertyNo) {
+        if (hasPropertyNoToggle) hasPropertyNoToggle.checked = true;
+        if (propertyFieldsContainer) propertyFieldsContainer.classList.remove('hidden');
+        if (stockPropertyNoInput) stockPropertyNoInput.value = match.propertyNo;
+        if (match.owner) {
+          if (hasOwnerToggle) hasOwnerToggle.checked = true;
+          if (ownerFieldContainer) ownerFieldContainer.classList.remove('hidden');
+          if (stockOwnerInput) stockOwnerInput.value = match.owner;
+        }
+        if (match.condition) {
+          const condRadio = document.querySelector(`input[name="itemCondition"][value="${match.condition}"]`);
+          if (condRadio) condRadio.checked = true;
+        }
+        refreshIcons();
+      }
+    }
+  });
+}
+
 // ==========================================
-// 8. AUTOCOMPLETE DATALIST HELPER
+// 8.1 AUTOCOMPLETE DATALIST HELPER
 // ==========================================
 function updateHistoryDatalist() {
   itemHistoryList.innerHTML = '';
@@ -1455,10 +1613,23 @@ stockForm.addEventListener('submit', (e) => {
   const actionRadio = document.querySelector('input[name="actionType"]:checked');
   const action = actionRadio && actionRadio.value === 'OUT' ? 'OUT' : 'IN';
   const qty = Math.max(1, Math.min(100000, parseInt(document.getElementById('stockQuantity').value, 10) || 1));
-  const remarks = document.getElementById('stockRemarks').value.trim().slice(0, 200);
+  const remarks = document.getElementById('stockRemarks').value.trim().slice(0, 300);
+
+  const hasProperty = hasPropertyNoToggle ? hasPropertyNoToggle.checked : false;
+  const propertyNo = hasProperty && stockPropertyNoInput ? stockPropertyNoInput.value.trim().slice(0, 60) : '';
+  const hasOwner = hasProperty && hasOwnerToggle ? hasOwnerToggle.checked : false;
+  const owner = hasOwner && stockOwnerInput ? stockOwnerInput.value.trim().slice(0, 80) : '';
+  const condRadio = document.querySelector('input[name="itemCondition"]:checked');
+  const condition = hasProperty && condRadio ? condRadio.value : '';
 
   if (!name || !category || !unit) {
     showToast('Please fill out all required fields.', 'warning', 'Form Incomplete');
+    return;
+  }
+
+  if (hasProperty && !propertyNo) {
+    showToast('Please enter the Property No. or switch off the Property toggle.', 'warning', 'Property No. Required');
+    if (stockPropertyNoInput) stockPropertyNoInput.focus();
     return;
   }
 
@@ -1468,6 +1639,13 @@ stockForm.addEventListener('submit', (e) => {
   const currentQty = existing ? (Number(existing.quantity) || 0) : 0;
   const newQty = action === 'IN' ? currentQty + qty : Math.max(0, currentQty - qty);
 
+  const conditionLabels = {
+    'A1': 'A1 (Serviceable - Below 5 yrs old)',
+    'A2': 'A2 (Serviceable - Above 5 yrs old)',
+    'A3': 'A3 (Unserviceable - Repairable)',
+    'R': 'R (Condemned - Impossible to repair)'
+  };
+
   // Open Glass Confirmation Dialog before committing
   openConfirmDialog({
     title: 'Confirm Stock Movement',
@@ -1475,7 +1653,7 @@ stockForm.addEventListener('submit', (e) => {
     detailsHtml: `
       <div class="confirm-detail-row">
         <span class="confirm-detail-label">Item Name:</span>
-        <span class="confirm-detail-value">${escapeHtml(name)}</span>
+        <span class="confirm-detail-value font-semibold text-slate-900">${escapeHtml(name)}</span>
       </div>
       <div class="confirm-detail-row">
         <span class="confirm-detail-label">Category:</span>
@@ -1495,6 +1673,24 @@ stockForm.addEventListener('submit', (e) => {
         <span class="confirm-detail-label">Inventory Balance:</span>
         <span class="confirm-detail-value font-mono font-bold">${currentQty} &rarr; <span class="text-[#003865]">${newQty} ${escapeHtml(unit)}</span></span>
       </div>
+      ${hasProperty ? `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Property No.:</span>
+          <span class="confirm-detail-value font-mono font-bold text-[#003865]">${escapeHtml(propertyNo)}</span>
+        </div>
+        ${owner ? `
+          <div class="confirm-detail-row">
+            <span class="confirm-detail-label">Accountable Officer:</span>
+            <span class="confirm-detail-value font-medium text-slate-800">${escapeHtml(owner)}</span>
+          </div>
+        ` : ''}
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Condition Grade:</span>
+          <span class="confirm-detail-value font-bold ${condition === 'R' ? 'text-red-600' : 'text-slate-800'}">
+            ${escapeHtml(conditionLabels[condition] || condition)}
+          </span>
+        </div>
+      ` : ''}
       <div class="confirm-detail-row">
         <span class="confirm-detail-label">Remarks:</span>
         <span class="confirm-detail-value italic text-slate-500">${remarks ? escapeHtml(remarks) : 'None (Optional)'}</span>
@@ -1516,29 +1712,38 @@ stockForm.addEventListener('submit', (e) => {
         unit: unit
       };
 
-      // 1. Optimistic Immediate Update
-      inventoryData[itemKey] = {
+      const updatedItem = {
         name: name,
         category: category,
         unit: unit,
         quantity: newQty,
         lastUpdated: timestamp
       };
+
+      if (hasProperty) {
+        updatedItem.propertyNo = propertyNo;
+        updatedItem.owner = owner;
+        updatedItem.condition = condition;
+        logEntry.propertyNo = propertyNo;
+        if (owner) logEntry.owner = owner;
+        if (condition) logEntry.condition = condition;
+      } else if (existing) {
+        if (existing.propertyNo) updatedItem.propertyNo = existing.propertyNo;
+        if (existing.owner) updatedItem.owner = existing.owner;
+        if (existing.condition) updatedItem.condition = existing.condition;
+      }
+
+      // 1. Optimistic Immediate Update
+      inventoryData[itemKey] = updatedItem;
       logsData.unshift(logEntry);
 
       // 2. Persist to Firebase
-      db.ref(`inventory/${itemKey}`).update({
-        name: name,
-        category: category,
-        unit: unit,
-        quantity: newQty,
-        lastUpdated: timestamp
-      });
+      db.ref(`inventory/${itemKey}`).update(updatedItem);
       db.ref(`inventory/${itemKey}/logs`).push(logEntry);
       db.ref('activity_logs').push(logEntry);
 
       // 3. Clear form and trigger auto-refresh across system
-      stockForm.reset();
+      resetStockForm();
       refreshAllViews();
       showToast(
         `${name} balance is now ${newQty} ${unit} (${action === 'IN' ? '+' : '-'}${qty})`,
@@ -1566,7 +1771,9 @@ function renderInventory() {
     const qtyNum = Number(item.quantity) || 0;
     const matchesSearch = item.name.toLowerCase().includes(searchTerm) ||
                           item.category.toLowerCase().includes(searchTerm) ||
-                          (item.unit && item.unit.toLowerCase().includes(searchTerm));
+                          (item.unit && item.unit.toLowerCase().includes(searchTerm)) ||
+                          (item.propertyNo && item.propertyNo.toLowerCase().includes(searchTerm)) ||
+                          (item.owner && item.owner.toLowerCase().includes(searchTerm));
     const matchesCat = !catFilter || item.category === catFilter;
     let matchesStatus = true;
     if (statusFilter === 'in_stock') matchesStatus = qtyNum > 0;
@@ -1603,6 +1810,13 @@ function renderInventory() {
     grouped[item.category].push(item);
   });
 
+  const conditionShort = {
+    'A1': '< 5 yrs',
+    'A2': '> 5 yrs',
+    'A3': 'Repairable',
+    'R': 'Condemned'
+  };
+
   let html = '';
   for (const [catName, catItems] of Object.entries(grouped)) {
     html += `
@@ -1636,10 +1850,32 @@ function renderInventory() {
                 ${isZero ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
               </span>
             </div>
-            <div class="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
+            <div class="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
               <i data-lucide="tag" class="w-3.5 h-3.5 text-slate-400"></i>
               <span>${escapeHtml(item.category)}</span>
             </div>
+
+            ${item.propertyNo ? `
+              <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                <span class="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-sky-50 text-[#003865] px-2 py-0.5 rounded border border-sky-200" title="Government Property No.">
+                  <i data-lucide="file-badge" class="w-3 h-3 text-[#003865]"></i>
+                  <span>#${escapeHtml(item.propertyNo)}</span>
+                </span>
+                ${item.condition ? `
+                  <span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${item.condition === 'R' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}" title="Item Condition Grade">
+                    ${escapeHtml(item.condition)}${conditionShort[item.condition] ? ': ' + conditionShort[item.condition] : ''}
+                  </span>
+                ` : ''}
+              </div>
+            ` : ''}
+
+            ${item.owner ? `
+              <div class="flex items-center gap-1.5 text-[11px] text-slate-600 mb-1.5">
+                <i data-lucide="user" class="w-3 h-3 text-slate-400 flex-shrink-0"></i>
+                <span class="truncate">Custodian: <strong>${escapeHtml(item.owner)}</strong></span>
+              </div>
+            ` : ''}
+
             <div class="card-timestamp-bar flex items-center justify-between text-xs mb-2">
               <div class="flex items-center gap-1.5 min-w-0" title="Latest stock activity date and time">
                 <i data-lucide="calendar-clock" class="w-3.5 h-3.5 text-[#003865] flex-shrink-0"></i>
@@ -1717,6 +1953,14 @@ window.openItemHistory = function(itemKey) {
             <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Stock Added +' : 'Stock Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
             <span class="font-bold text-slate-700 ml-1.5">(New Balance: <strong class="text-[#003865]">${escapeHtml(l.newQty)} ${escapeHtml(l.unit || '')}</strong>)</span>
           </div>
+          ${l.propertyNo ? `
+            <div class="mt-1.5 text-xs text-slate-600 flex flex-wrap items-center gap-1.5">
+              <span class="font-semibold text-slate-500">Property No:</span>
+              <span class="font-mono font-bold text-[#003865] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">#${escapeHtml(l.propertyNo)}</span>
+              ${l.condition ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${l.condition === 'R' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}">Grade ${escapeHtml(l.condition)}</span>` : ''}
+              ${l.owner ? `<span class="text-slate-600">• Custodian: <strong>${escapeHtml(l.owner)}</strong></span>` : ''}
+            </div>
+          ` : ''}
           <div class="timeline-notes mt-1.5 text-xs text-slate-600">
             <span class="font-semibold text-slate-500">Remarks:</span> ${escapeHtml(l.remarks || 'Standard stock transaction')}
           </div>
@@ -1725,18 +1969,6 @@ window.openItemHistory = function(itemKey) {
     }).join('');
     refreshIcons();
   });
-};
-
-window.openQuickAdjustment = function(itemKey) {
-  const item = inventoryData[itemKey];
-  if (!item) return;
-  document.querySelector('[data-target="tabForm"]').click();
-  document.getElementById('stockItemName').value = item.name;
-  stockCategorySelect.value = item.category;
-  document.getElementById('stockUnit').value = item.unit || 'pcs';
-  document.getElementById('stockQuantity').value = '';
-  document.getElementById('stockQuantity').focus();
-  refreshIcons();
 };
 
 window.resetDbFilters = function() {
@@ -1830,7 +2062,9 @@ function renderLogs(logs) {
   const filter = logSearchInput.value.toLowerCase().trim();
   const filtered = logs.filter(l =>
     (l.itemName && l.itemName.toLowerCase().includes(filter)) ||
-    (l.remarks && l.remarks.toLowerCase().includes(filter))
+    (l.remarks && l.remarks.toLowerCase().includes(filter)) ||
+    (l.propertyNo && l.propertyNo.toLowerCase().includes(filter)) ||
+    (l.owner && l.owner.toLowerCase().includes(filter))
   );
 
   if (filtered.length === 0) {
@@ -1842,10 +2076,21 @@ function renderLogs(logs) {
     <tr>
       <td>${new Date(l.date).toLocaleDateString()} ${new Date(l.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
       <td><span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${escapeHtml(l.action)}</span></td>
-      <td><strong>${escapeHtml(l.itemName)}</strong></td>
+      <td>
+        <strong>${escapeHtml(l.itemName)}</strong>
+        ${l.propertyNo ? `
+          <div class="text-[11px] font-mono text-[#003865] flex items-center gap-1 mt-0.5">
+            <span class="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">#${escapeHtml(l.propertyNo)}</span>
+            ${l.condition ? `<span class="font-sans font-bold text-[10px] text-slate-600">(${escapeHtml(l.condition)})</span>` : ''}
+          </div>
+        ` : ''}
+      </td>
       <td>${l.action === 'IN' ? '+' : '-'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</td>
       <td>${escapeHtml(l.newQty)}</td>
-      <td><small class="text-slate-600">${escapeHtml(l.remarks || '—')}</small></td>
+      <td>
+        <small class="text-slate-600 block">${escapeHtml(l.remarks || '—')}</small>
+        ${l.owner ? `<small class="text-slate-500 font-medium block">Custodian: ${escapeHtml(l.owner)}</small>` : ''}
+      </td>
     </tr>
   `).join('');
 }

@@ -395,6 +395,7 @@ html, body {
 }
 .form-group input, 
 .form-group select, 
+.form-group textarea, 
 .search-box input, 
 .inline-form input,
 .compact-search {
@@ -416,6 +417,7 @@ html, body {
 }
 .form-group input:focus, 
 .form-group select:focus, 
+.form-group textarea:focus, 
 .search-box input:focus,
 .inline-form input:focus {
   background: rgba(255, 255, 255, 0.95);
@@ -977,6 +979,7 @@ html, body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(clamp(140px, 22vw, 200px), 1fr));
   gap: clamp(0.75rem, 2vw, 1rem);
+  margin-bottom: 1.35rem;
 }
 .quick-action-btn {
   padding: 0.95rem 1rem;
@@ -1756,3 +1759,186 @@ html, body {
   color: #0284c7 !important;
 }
 
+/* ====================================================
+   16. SWITCH TOGGLE & PROPERTY FORM STYLES
+   ==================================================== */
+.glass-textarea {
+  resize: vertical;
+  min-height: 76px;
+  line-height: 1.45;
+  font-family: inherit;
+}
+
+.switch-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.switch-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+.switch-toggle input:checked + .switch-slider {
+  background: linear-gradient(135deg, #003865 0%, #0f766e 100%);
+}
+.switch-toggle input:checked + .switch-slider:before {
+  transform: translateX(20px);
+}
+.switch-toggle:hover .switch-slider {
+  filter: brightness(1.05);
+}
+
+/* Smaller switch for nested options */
+.switch-toggle.switch-sm {
+  width: 38px;
+  height: 20px;
+}
+.switch-toggle.switch-sm .switch-slider:before {
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+}
+.switch-toggle.switch-sm input:checked + .switch-slider:before {
+  transform: translateX(18px);
+}
+
+.glass-panel-subtle {
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 12px;
+  padding: clamp(0.85rem, 2vw, 1.1rem);
+  box-shadow: 0 4px 14px rgba(0, 30, 60, 0.04);
+}
+.glass-panel-inner {
+  background: rgba(248, 250, 252, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.85);
+}
+.toggle-icon-wrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(0, 56, 101, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Condition Cards Grid */
+.condition-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 0.65rem;
+  width: 100%;
+}
+.condition-card {
+  position: relative;
+  cursor: pointer;
+  margin: 0;
+  display: block;
+}
+.condition-card input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.condition-card-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1.5px solid rgba(203, 213, 225, 0.85);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 52px;
+  user-select: none;
+}
+.condition-card:hover .condition-card-body {
+  background: #ffffff;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+.condition-card input:checked + .condition-card-body {
+  background: rgba(240, 249, 255, 0.95);
+  border-color: #003865;
+  box-shadow: 0 0 0 1px #003865, 0 4px 12px rgba(0, 56, 101, 0.12);
+}
+.condition-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #003865;
+  color: #ffffff;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+.condition-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.condition-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+.condition-desc {
+  font-size: 0.7rem;
+  color: #64748b;
+  line-height: 1.25;
+  margin-top: 1px;
+}
+.condition-card-damage input:checked + .condition-card-body {
+  background: rgba(254, 242, 242, 0.95);
+  border-color: #dc2626;
+  box-shadow: 0 0 0 1px #dc2626, 0 4px 12px rgba(220, 38, 38, 0.12);
+}
+.condition-card-damage .condition-code {
+  background: #dc2626;
+}
+
+/* Form Actions Flex */
+.form-actions-flex {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}

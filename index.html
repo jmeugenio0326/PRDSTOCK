@@ -149,6 +149,26 @@
           </div>
         </div>
 
+        <!-- Quick Shortcut Actions (Top of Home Page) -->
+        <div class="quick-actions-bar">
+          <button class="quick-action-btn glass-panel" onclick="openStockFormWithAction('IN')">
+            <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>
+            <span>Record Stock IN</span>
+          </button>
+          <button class="quick-action-btn glass-panel" onclick="openStockFormWithAction('OUT')">
+            <i data-lucide="minus-circle" class="w-5 h-5 text-amber-600"></i>
+            <span>Issue Stock OUT</span>
+          </button>
+          <button class="quick-action-btn glass-panel" onclick="document.querySelector('[data-target=\'tabDatabase\']').click()">
+            <i data-lucide="search" class="w-5 h-5 text-[#003865]"></i>
+            <span>Browse Inventory</span>
+          </button>
+          <button class="quick-action-btn glass-panel" onclick="document.querySelector('[data-target=\'tabCategories\']').click()">
+            <i data-lucide="folder-tree" class="w-5 h-5 text-[#0f766e]"></i>
+            <span>Manage Categories</span>
+          </button>
+        </div>
+
         <!-- Quick Access / Stats Bar -->
         <div class="stats-overview">
           <div class="stat-card glass-panel">
@@ -228,26 +248,6 @@
               <p class="empty-state-text">No transaction logs available.</p>
             </div>
           </div>
-        </div>
-
-        <!-- Quick Shortcut Actions -->
-        <div class="quick-actions-bar">
-          <button class="quick-action-btn glass-panel" onclick="openStockFormWithAction('IN')">
-            <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>
-            <span>Record Stock IN</span>
-          </button>
-          <button class="quick-action-btn glass-panel" onclick="openStockFormWithAction('OUT')">
-            <i data-lucide="minus-circle" class="w-5 h-5 text-amber-600"></i>
-            <span>Issue Stock OUT</span>
-          </button>
-          <button class="quick-action-btn glass-panel" onclick="document.querySelector('[data-target=\'tabDatabase\']').click()">
-            <i data-lucide="search" class="w-5 h-5 text-[#003865]"></i>
-            <span>Browse Inventory</span>
-          </button>
-          <button class="quick-action-btn glass-panel" onclick="document.querySelector('[data-target=\'tabCategories\']').click()">
-            <i data-lucide="folder-tree" class="w-5 h-5 text-[#0f766e]"></i>
-            <span>Manage Categories</span>
-          </button>
         </div>
       </section>
 
@@ -348,11 +348,129 @@
                 <input type="number" id="stockQuantity" min="1" max="100000" placeholder="1" required>
               </div>
             </div>
-            <div class="form-group">
-              <label for="stockRemarks">Remarks / Purpose / Reference (Optional)</label>
-              <input type="text" id="stockRemarks" placeholder="Optional: e.g., PO #1024 or Issued to Engineering Section" maxlength="200">
+            <!-- Property No. & Equipment Details Toggle Section -->
+            <div class="property-toggle-card glass-panel-subtle mb-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="toggle-icon-wrap">
+                    <i data-lucide="file-badge" class="w-4 h-4 text-[#003865]"></i>
+                  </div>
+                  <div>
+                    <span class="font-semibold text-sm text-slate-800 block">Property / Equipment Tag</span>
+                    <span class="text-xs text-slate-500">Enable for items assigned with official Property Number / Equipment Tag</span>
+                  </div>
+                </div>
+                <label class="switch-toggle" title="Toggle Property No.">
+                  <input type="checkbox" id="hasPropertyNoToggle">
+                  <span class="switch-slider"></span>
+                </label>
+              </div>
+
+              <!-- Conditional Property Details Container (hidden by default) -->
+              <div id="propertyFieldsContainer" class="property-fields-container hidden mt-4 pt-3.5 border-t border-slate-200/60">
+                <!-- Property No. Input -->
+                <div class="form-group mb-3">
+                  <label for="stockPropertyNo" class="flex items-center gap-1.5 font-semibold text-xs text-slate-700">
+                    <i data-lucide="hash" class="w-3.5 h-3.5 text-[#003865]"></i>
+                    <span>Property No.</span>
+                    <span class="text-red-500">*</span>
+                  </label>
+                  <input type="text" id="stockPropertyNo" placeholder="e.g. NIA-2024-PROP-0042" maxlength="60" class="glass-input">
+                </div>
+
+                <!-- Accountable Owner / Person Toggle & Input -->
+                <div class="owner-toggle-card glass-panel-inner p-3 rounded-lg mb-3">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <i data-lucide="user-check" class="w-4 h-4 text-[#0f766e]"></i>
+                      <div>
+                        <span class="font-medium text-xs text-slate-800 block">Accountable Officer / End-User</span>
+                        <span class="text-[11px] text-slate-500">Assign accountable person or custodian for this property</span>
+                      </div>
+                    </div>
+                    <label class="switch-toggle switch-sm" title="Toggle Accountable Owner">
+                      <input type="checkbox" id="hasOwnerToggle">
+                      <span class="switch-slider"></span>
+                    </label>
+                  </div>
+
+                  <div id="ownerFieldContainer" class="owner-field-container hidden mt-2.5 pt-2 border-t border-slate-200/50">
+                    <label for="stockOwner" class="block text-xs font-semibold text-slate-700 mb-1">
+                      Accountable Person / Owner Name
+                    </label>
+                    <input type="text" id="stockOwner" placeholder="e.g. Engr. Juan Dela Cruz (Senior Engineer)" maxlength="80" class="glass-input">
+                  </div>
+                </div>
+
+                <!-- Item Condition / Status Grade (COA / NIA Standards) -->
+                <div class="form-group mb-1">
+                  <label class="block text-xs font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-[#003865]"></i>
+                    <span>Item Condition / Status</span>
+                  </label>
+                  <div class="condition-options-grid">
+                    <label class="condition-card" title="A1 - Below 5 years old">
+                      <input type="radio" name="itemCondition" value="A1" checked>
+                      <div class="condition-card-body">
+                        <div class="condition-code">A1</div>
+                        <div class="condition-info">
+                          <span class="condition-title">Serviceable</span>
+                          <span class="condition-desc">Below 5 years old</span>
+                        </div>
+                      </div>
+                    </label>
+                    <label class="condition-card" title="A2 - Above 5 years old">
+                      <input type="radio" name="itemCondition" value="A2">
+                      <div class="condition-card-body">
+                        <div class="condition-code">A2</div>
+                        <div class="condition-info">
+                          <span class="condition-title">Serviceable</span>
+                          <span class="condition-desc">Above 5 years old</span>
+                        </div>
+                      </div>
+                    </label>
+                    <label class="condition-card" title="A3 - Repairable">
+                      <input type="radio" name="itemCondition" value="A3">
+                      <div class="condition-card-body">
+                        <div class="condition-code">A3</div>
+                        <div class="condition-info">
+                          <span class="condition-title">Unserviceable</span>
+                          <span class="condition-desc">Repairable</span>
+                        </div>
+                      </div>
+                    </label>
+                    <label class="condition-card condition-card-damage" title="R - Damage impossible to repair anymore">
+                      <input type="radio" name="itemCondition" value="R">
+                      <div class="condition-card-body">
+                        <div class="condition-code">R</div>
+                        <div class="condition-info">
+                          <span class="condition-title">Condemned</span>
+                          <span class="condition-desc">Damage / Unrepairable</span>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button type="submit" class="btn btn-primary btn-block glass-btn"><i data-lucide="check-circle" class="w-4 h-4"></i> Record Stock</button>
+
+            <!-- Remarks Textarea in the Last -->
+            <div class="form-group mb-4">
+              <label for="stockRemarks">Remarks / Purpose / Reference (Optional)</label>
+              <textarea id="stockRemarks" rows="3" placeholder="Optional: e.g., PO #1024, Project site, or specific deployment notes..." maxlength="300" class="glass-textarea"></textarea>
+            </div>
+
+            <!-- Actions: Clear Form & Record Stock -->
+            <div class="form-actions-flex flex items-center gap-3">
+              <button type="button" id="clearStockFormBtn" class="btn btn-secondary glass-btn flex items-center justify-center gap-2" title="Clear all fields">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                <span>Clear Form</span>
+              </button>
+              <button type="submit" id="recordStockSubmitBtn" class="btn btn-primary glass-btn flex-1 flex items-center justify-center gap-2">
+                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                <span>Record Stock</span>
+              </button>
+            </div>
           </form>
         </div>
       </section>
