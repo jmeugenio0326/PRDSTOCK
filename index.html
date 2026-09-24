@@ -6,9 +6,11 @@
   <title>NIA - Property Office Inventory System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/styles.css">
+  <!-- Chart.js for Animated Live Graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Firebase SDKs (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -19,21 +21,51 @@
   <div id="loginView" class="login-container">
     <div class="login-card">
       <div class="login-header">
-        <i class="fa-solid fa-building-shield brand-icon"></i>
+        <div class="brand-shield">
+          <i class="fa-solid fa-building-shield"></i>
+        </div>
         <h2>National Irrigation Administration</h2>
         <p>Property & Supplies Management Office</p>
       </div>
-      <form id="loginForm">
+
+      <!-- Recent Logins Quick Account Card -->
+      <div id="recentLoginCard" class="recent-login-card">
+        <div class="recent-avatar">
+          <i class="fa-solid fa-user-shield"></i>
+        </div>
+        <div class="recent-info">
+          <div class="recent-label">Recent Account</div>
+          <div class="recent-name" id="recentUsername">property</div>
+          <div class="recent-role">Property Custodian</div>
+        </div>
+        <button type="button" id="switchUserBtn" class="btn-switch-user" title="Switch Account">
+          <i class="fa-solid fa-arrows-rotate"></i>
+        </button>
+      </div>
+
+      <form id="loginForm" autocomplete="off">
         <div id="loginError" class="alert error hidden"></div>
-        <div class="form-group">
+
+        <!-- Username Input (Hidden when using recent login) -->
+        <div class="form-group hidden" id="usernameGroup">
           <label for="loginUsername">Username</label>
-          <input type="text" id="loginUsername" placeholder="Enter username" required autocomplete="username">
+          <div class="input-icon-wrap">
+            <i class="fa-solid fa-user"></i>
+            <input type="text" id="loginUsername" placeholder="Enter username" autocomplete="username">
+          </div>
         </div>
+
+        <!-- 4-Digit Passcode Input -->
         <div class="form-group">
-          <label for="loginPassword">Password</label>
-          <input type="password" id="loginPassword" placeholder="Enter password" required autocomplete="current-password">
+          <label class="passcode-label">4-Digit Passcode</label>
+          <div class="passcode-container" id="passcodeContainer">
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="pin-box" id="pin1" autocomplete="off" autofocus>
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="pin-box" id="pin2" autocomplete="off">
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="pin-box" id="pin3" autocomplete="off">
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="1" class="pin-box" id="pin4" autocomplete="off">
+          </div>
+          <div class="passcode-hint">Default passcode: <strong>1234</strong></div>
         </div>
-        <button type="submit" class="btn btn-primary btn-block">Sign In</button>
       </form>
     </div>
   </div>
@@ -47,48 +79,132 @@
         <h1>National Irrigation Administration - Property Office</h1>
       </div>
       <div class="header-user">
-        <span class="badge badge-admin"><i class="fa-solid fa-user-shield"></i> property</span>
+        <span class="badge badge-admin"><i class="fa-solid fa-user-shield"></i> <span id="currentAccountBadge">property</span></span>
         <button id="logoutBtn" class="btn-icon" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
       </div>
     </header>
 
     <!-- Main Content Area -->
     <main class="main-content">
-      
-      <!-- Quick Access / Stats Bar -->
-      <section class="stats-overview">
-        <div class="stat-card">
-          <div class="stat-icon icon-blue"><i class="fa-solid fa-box"></i></div>
-          <div>
-            <div class="stat-value" id="statTotalItems">0</div>
-            <div class="stat-label">Total Unique Items</div>
+
+      <!-- TAB 0: HOME / DASHBOARD -->
+      <section id="tabHome" class="tab-section active">
+        <!-- Welcome Hero Banner -->
+        <div class="dashboard-hero">
+          <div class="hero-text">
+            <h2>Welcome back, <span id="heroUserName">Property Custodian</span></h2>
+            <p>Property & Supplies Management Dashboard</p>
+          </div>
+          <div class="hero-live-badge">
+            <span class="pulse-dot"></span>
+            <span id="liveClockText">Live Stock Monitor</span>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon icon-green"><i class="fa-solid fa-check"></i></div>
-          <div>
-            <div class="stat-value" id="statInStock">0</div>
-            <div class="stat-label">In Stock</div>
+
+        <!-- Quick Access / Stats Bar -->
+        <div class="stats-overview">
+          <div class="stat-card">
+            <div class="stat-icon icon-blue"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <div>
+              <div class="stat-value" id="statTotalItems">0</div>
+              <div class="stat-label">Total Items</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon icon-teal"><i class="fa-solid fa-cubes"></i></div>
+            <div>
+              <div class="stat-value" id="statTotalVolume">0</div>
+              <div class="stat-label">Total Units in Stock</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon icon-green"><i class="fa-solid fa-circle-check"></i></div>
+            <div>
+              <div class="stat-value" id="statInStock">0</div>
+              <div class="stat-label">In Stock</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon icon-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div>
+              <div class="stat-value" id="statOutOfStock">0</div>
+              <div class="stat-label">Out of Stock</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon icon-purple"><i class="fa-solid fa-tags"></i></div>
+            <div>
+              <div class="stat-value" id="statCategories">0</div>
+              <div class="stat-label">Categories</div>
+            </div>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon icon-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
-          <div>
-            <div class="stat-value" id="statOutOfStock">0</div>
-            <div class="stat-label">Out of Stock</div>
+
+        <!-- Live Animated Stock Graph Card -->
+        <div class="card graph-card">
+          <div class="card-header-flex">
+            <div>
+              <h2 class="graph-title"><i class="fa-solid fa-chart-line"></i> Animated Live Stock Line Graph</h2>
+              <p class="subtitle" style="margin-bottom: 0;">Real-time inventory level trends & movement activity</p>
+            </div>
+            <div class="graph-mode-toggle">
+              <button type="button" class="btn-graph-mode active" data-mode="movement">Movement History</button>
+              <button type="button" class="btn-graph-mode" data-mode="levels">Stock by Item</button>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="liveStockChart"></canvas>
           </div>
         </div>
-        <div class="stat-card">
-          <div class="stat-icon icon-purple"><i class="fa-solid fa-tags"></i></div>
-          <div>
-            <div class="stat-value" id="statCategories">0</div>
-            <div class="stat-label">Categories</div>
+
+        <!-- Two Column Dashboard Layout -->
+        <div class="dashboard-grid">
+          <!-- Critical Attention / Low Stock -->
+          <div class="card">
+            <div class="card-header-flex">
+              <h2><i class="fa-solid fa-bell"></i> Restock Needed / Out of Stock</h2>
+              <span class="badge-count" id="outOfStockCountBadge">0</span>
+            </div>
+            <div id="homeAttentionList" class="attention-list">
+              <p class="empty-state-text">All items are sufficiently stocked.</p>
+            </div>
           </div>
+
+          <!-- Recent Movements Activity Feed -->
+          <div class="card">
+            <div class="card-header-flex">
+              <h2><i class="fa-solid fa-bolt"></i> Recent Activity Feed</h2>
+              <button type="button" class="btn-link" onclick="document.querySelector('[data-target=\'tabLogs\']').click()">View All</button>
+            </div>
+            <div id="homeRecentActivityList" class="activity-feed-list">
+              <p class="empty-state-text">No transaction logs available.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Shortcut Actions -->
+        <div class="quick-actions-bar">
+          <button class="quick-action-btn" onclick="openStockFormWithAction('IN')">
+            <i class="fa-solid fa-plus-circle"></i>
+            <span>Record Stock IN</span>
+          </button>
+          <button class="quick-action-btn" onclick="openStockFormWithAction('OUT')">
+            <i class="fa-solid fa-minus-circle"></i>
+            <span>Issue Stock OUT</span>
+          </button>
+          <button class="quick-action-btn" onclick="document.querySelector('[data-target=\'tabDatabase\']').click()">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>Browse Inventory</span>
+          </button>
+          <button class="quick-action-btn" onclick="document.querySelector('[data-target=\'tabCategories\']').click()">
+            <i class="fa-solid fa-folder-tree"></i>
+            <span>Manage Categories</span>
+          </button>
         </div>
       </section>
 
       <!-- TAB 1: Inventory Database -->
-      <section id="tabDatabase" class="tab-section active">
+      <section id="tabDatabase" class="tab-section">
         <div class="section-toolbar">
           <div class="search-box">
             <i class="fa-solid fa-magnifying-glass"></i>
@@ -137,6 +253,8 @@
                   <option value="sets">Sets</option>
                   <option value="rolls">Rolls</option>
                   <option value="packs">Packs</option>
+                  <option value="units">Units</option>
+                  <option value="meters">Meters</option>
                 </select>
               </div>
             </div>
@@ -192,7 +310,11 @@
       <!-- TAB 4: Category Management -->
       <section id="tabCategories" class="tab-section">
         <div class="card">
-          <h2><i class="fa-solid fa-folder-tree"></i> Category Management</h2>
+          <div class="card-header-flex">
+            <h2><i class="fa-solid fa-folder-tree"></i> Category Management</h2>
+            <span class="badge-count" id="categoryTotalBadge">0</span>
+          </div>
+          <p class="subtitle">Right-click or long-press on any category chip to <strong>Rename</strong> or <strong>Remove</strong> it.</p>
           <form id="categoryForm" class="inline-form">
             <input type="text" id="newCategoryInput" placeholder="Enter new category name..." required>
             <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Category</button>
@@ -205,7 +327,11 @@
 
     <!-- Bottom Dock Navigation Bar (Mobile / Desktop) -->
     <nav class="bottom-dock">
-      <button class="dock-btn active" data-target="tabDatabase">
+      <button class="dock-btn active" data-target="tabHome">
+        <i class="fa-solid fa-house"></i>
+        <span>Home</span>
+      </button>
+      <button class="dock-btn" data-target="tabDatabase">
         <i class="fa-solid fa-table-cells-large"></i>
         <span>Database</span>
       </button>
@@ -224,10 +350,17 @@
     </nav>
   </div>
 
-  <!-- Custom Context Menu -->
+  <!-- Custom Item Context Menu -->
   <div id="itemContextMenu" class="context-menu hidden">
     <button id="ctxViewHistory"><i class="fa-solid fa-clock-rotate-left"></i> View Stock In/Out History</button>
     <button id="ctxQuickAction"><i class="fa-solid fa-pen-to-square"></i> Quick Stock Adjustment</button>
+  </div>
+
+  <!-- Custom Category Context Menu -->
+  <div id="categoryContextMenu" class="context-menu hidden">
+    <div class="context-menu-title" id="ctxCategoryTitle">Category Actions</div>
+    <button id="ctxRenameCategory"><i class="fa-solid fa-pen-to-square"></i> Rename Category</button>
+    <button id="ctxRemoveCategory" class="menu-danger"><i class="fa-solid fa-trash-can"></i> Remove Category</button>
   </div>
 
   <!-- Item History Modal -->
@@ -239,6 +372,29 @@
         <button class="modal-close" id="closeModalBtn">&times;</button>
       </div>
       <div class="modal-body" id="modalTimelineBody"></div>
+    </div>
+  </div>
+
+  <!-- Rename Category Modal -->
+  <div id="renameCategoryModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3>Rename Category</h3>
+        <button class="modal-close" id="closeRenameModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="renameCategoryForm">
+          <div class="form-group">
+            <label for="renameCategoryInput">New Category Name</label>
+            <input type="text" id="renameCategoryInput" required autocomplete="off">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="cancelRenameBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-check"></i> Save Changes</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
