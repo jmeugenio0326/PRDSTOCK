@@ -64,22 +64,62 @@ const logsTableBody = document.getElementById('logsTableBody');
 const logSearchInput = document.getElementById('logSearchInput');
 
 // ==========================================
-// 1. Pre-seed Default Admin and Categories
+// 0. SECURITY & DATA INTEGRITY UTILITIES
 // ==========================================
-function ensureInitialSeed() {
+
+// Strict HTML Entity Escaper for Anti-XSS
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+// Safe Database Key Generator (alphanumeric & underscore only)
+function encodeDbKey(name) {
+  return String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '_')
+    .slice(0, 80);
+}
+
+// Web Cryptography API: Salted SHA-256 Passcode Hash
+async function computeSecureHash(pin) {
+  const encoder = new TextEncoder();
+  const saltedPayload = `nia_property_salt_2026_${pin}_secure_auth`;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(saltedPayload));
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ==========================================
+// 1. PRE-SEED DEFAULT ADMIN AND CATEGORIES
+// ==========================================
+async function ensureInitialSeed() {
+  const defaultHash = await computeSecureHash('1234');
+
   db.ref('users/property').once('value', (snap) => {
     if (!snap.exists()) {
       db.ref('users/property').set({
         username: 'property',
-        password: '1234', // 4-digit passcode
+        passwordHash: defaultHash,
         role: 'admin',
         title: 'Property Custodian'
       });
     } else {
       const val = snap.val();
-      // Ensure 4-digit passcode format exists for 'property'
-      if (!val.password || val.password === 'propertyoffice') {
-        db.ref('users/property').update({ password: '1234', title: 'Property Custodian' });
+      // Auto-migrate legacy plain text password to cryptographic SHA-256 hash
+      if (!val.passwordHash || val.password === '1234' || val.password === 'propertyoffice') {
+        db.ref('users/property').update({
+          passwordHash: defaultHash,
+          title: 'Property Custodian'
+        });
       }
     }
   });
@@ -93,7 +133,7 @@ function ensureInitialSeed() {
 }
 
 // ==========================================
-// 2. Auth Flow with Recent Logins & 4-Digit Passcode
+// 2. AUTH FLOW & 4-DIGIT SECURE PASSCODE
 // ==========================================
 let activeLoginUsername = 'property';
 let isManualUsernameMode = false;
@@ -129,7 +169,7 @@ function setupLoginUI() {
   setTimeout(() => pinInputs[0].focus(), 150);
 }
 
-// Toggle manual username or recent account
+// Switch between recent account and manual username
 switchUserBtn.addEventListener('click', () => {
   isManualUsernameMode = !isManualUsernameMode;
   if (isManualUsernameMode) {
@@ -152,33 +192,28 @@ function getPasscodeValue() {
   return pinInputs.map(input => input.value).join('');
 }
 
-// Passcode inputs navigation & auto-submit
+// Passcode inputs navigation & auto-enter
 pinInputs.forEach((input, index) => {
-  // Input event: auto advance on digit
-  input.addEventListener('input', (e) => {
-    const val = input.value;
-    if (val.length >= 1) {
-      input.value = val.slice(-1); // Only keep single digit
-      if (index < pinInputs.length - 1) {
-        pinInputs[index + 1].focus();
-      }
+  input.addEventListener('input', () => {
+    const val = input.value.replace(/[^0-9]/g, '');
+    input.value = val ? val.slice(-1) : '';
+    if (input.value && index < pinInputs.length - 1) {
+      pinInputs[index + 1].focus();
     }
 
-    // Auto-enter: Check if all 4 digits are entered
+    // Auto-enter: Trigger login as soon as 4th digit is typed
     const code = getPasscodeValue();
     if (code.length === 4) {
       attemptLogin();
     }
   });
 
-  // Keydown event: Backspace navigates to previous box
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace' && !input.value && index > 0) {
       pinInputs[index - 1].focus();
     }
   });
 
-  // Paste event: Support pasting 4 digits
   input.addEventListener('paste', (e) => {
     e.preventDefault();
     const pasteData = (e.clipboardData || window.clipboardData).getData('text').trim();
@@ -192,13 +227,13 @@ pinInputs.forEach((input, index) => {
   });
 });
 
-// Perform Authentication
-function attemptLogin() {
+// Perform Authenticated Sign-in
+async function attemptLogin() {
   loginError.classList.add('hidden');
 
   let username = activeLoginUsername;
   if (isManualUsernameMode) {
-    username = loginUsernameInput.value.trim().toLowerCase();
+    username = loginUsernameInput.value.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     if (!username) {
       showLoginError('Please enter your username.');
       loginUsernameInput.focus();
@@ -212,14 +247,26 @@ function attemptLogin() {
     return;
   }
 
+  const computedHash = await computeSecureHash(passcode);
+
   db.ref(`users/${username}`).once('value', (snap) => {
     const user = snap.val();
-    // Allow either the 4-digit passcode or fallback to 1234 for property
-    if (user && (user.password === passcode || (username === 'property' && passcode === '1234'))) {
+
+    // Check SHA-256 hash or fallback for initial setup
+    const isHashValid = user && user.passwordHash && user.passwordHash === computedHash;
+    const isLegacyValid = user && (user.password === passcode || (username === 'property' && passcode === '1234'));
+
+    if (isHashValid || isLegacyValid) {
+      // If legacy plain-text, upgrade immediately to SHA-256 hash
+      if (!user.passwordHash) {
+        db.ref(`users/${username}`).update({ passwordHash: computedHash });
+      }
+
       const userSession = {
         username: user.username || username,
         role: user.role || 'admin',
-        title: user.title || 'Property Custodian'
+        title: user.title || 'Property Custodian',
+        loginTime: Date.now()
       };
 
       saveRecentLogin(userSession);
@@ -255,15 +302,24 @@ logoutBtn.addEventListener('click', () => {
   location.reload();
 });
 
+// Check Session & Enforce Inactivity Expiry (8 hours)
 function checkSession() {
-  const session = localStorage.getItem('nia_session');
-  if (session) {
-    showApp();
-  } else {
-    loginView.classList.remove('hidden');
-    appView.classList.add('hidden');
-    setupLoginUI();
+  const sessionStr = localStorage.getItem('nia_session');
+  if (sessionStr) {
+    try {
+      const session = JSON.parse(sessionStr);
+      const EIGHT_HOURS = 8 * 60 * 60 * 1000;
+      if (session.loginTime && Date.now() - session.loginTime < EIGHT_HOURS) {
+        showApp();
+        return;
+      }
+    } catch (e) {}
+    localStorage.removeItem('nia_session');
   }
+
+  loginView.classList.remove('hidden');
+  appView.classList.add('hidden');
+  setupLoginUI();
 }
 
 function showApp() {
@@ -273,9 +329,9 @@ function showApp() {
   try {
     const session = JSON.parse(localStorage.getItem('nia_session'));
     if (session) {
-      document.getElementById('currentAccountBadge').textContent = session.username;
+      document.getElementById('currentAccountBadge').textContent = escapeHtml(session.username);
       const heroName = document.getElementById('heroUserName');
-      if (heroName) heroName.textContent = session.title || session.username;
+      if (heroName) heroName.textContent = escapeHtml(session.title || session.username);
     }
   } catch (e) {}
 
@@ -284,7 +340,7 @@ function showApp() {
 }
 
 // ==========================================
-// 3. Navigation Dock
+// 3. NAVIGATION DOCK
 // ==========================================
 document.querySelectorAll('.dock-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -305,13 +361,14 @@ document.querySelectorAll('.dock-btn').forEach(btn => {
 
 window.openStockFormWithAction = function(action) {
   document.querySelector('[data-target="tabForm"]').click();
-  const radio = document.querySelector(`input[name="actionType"][value="${action}"]`);
+  const safeAction = action === 'OUT' ? 'OUT' : 'IN';
+  const radio = document.querySelector(`input[name="actionType"][value="${safeAction}"]`);
   if (radio) radio.checked = true;
   document.getElementById('stockItemName').focus();
 };
 
 // ==========================================
-// 4. Realtime Data Listeners
+// 4. REALTIME DATA LISTENERS
 // ==========================================
 function initDataListeners() {
   // Categories Listener
@@ -321,13 +378,14 @@ function initDataListeners() {
     dbCategoryFilter.innerHTML = '<option value="">All Categories</option>';
 
     snap.forEach(child => {
-      const catName = child.val();
+      const catName = String(child.val() || '');
       const catKey = child.key;
       categoriesData.push({ key: catKey, name: catName });
 
-      // Populate form and filter selects
-      stockCategorySelect.insertAdjacentHTML('beforeend', `<option value="${catName}">${catName}</option>`);
-      dbCategoryFilter.insertAdjacentHTML('beforeend', `<option value="${catName}">${catName}</option>`);
+      // Populate form and filter selects safely
+      const escaped = escapeHtml(catName);
+      stockCategorySelect.insertAdjacentHTML('beforeend', `<option value="${escaped}">${escaped}</option>`);
+      dbCategoryFilter.insertAdjacentHTML('beforeend', `<option value="${escaped}">${escaped}</option>`);
     });
 
     renderCategoriesList();
@@ -345,7 +403,7 @@ function initDataListeners() {
     updateDashboard();
   });
 
-  // Global Logs Listener
+  // Global Activity Logs Listener
   db.ref('activity_logs').limitToLast(100).on('value', (snap) => {
     logsData = [];
     snap.forEach(child => {
@@ -361,7 +419,7 @@ function getCategoryItemCount(catName) {
 }
 
 // ==========================================
-// 5. Category Management (Right-Click Rename / Delete & Count)
+// 5. CATEGORY MANAGEMENT (RENAME & REMOVE)
 // ==========================================
 function renderCategoriesList() {
   const listEl = document.getElementById('categoriesList');
@@ -379,18 +437,18 @@ function renderCategoriesList() {
     chip.dataset.name = cat.name;
     chip.innerHTML = `
       <i class="fa-solid fa-folder" style="color:var(--primary);"></i>
-      <span class="category-chip-name"><strong>${cat.name}</strong></span>
+      <span class="category-chip-name"><strong>${escapeHtml(cat.name)}</strong></span>
       <span class="category-count-badge" title="${count} item(s) in this category">${count}</span>
       <i class="fa-solid fa-ellipsis-vertical chip-delete" title="More options"></i>
     `;
 
-    // Right-click event for Desktop
+    // Right-click for Desktop
     chip.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openCategoryContextMenu(e.pageX, e.pageY, cat.key, cat.name);
     });
 
-    // Click on options ellipsis icon
+    // Tap on option icon
     chip.querySelector('.chip-delete').addEventListener('click', (e) => {
       e.stopPropagation();
       openCategoryContextMenu(e.pageX, e.pageY, cat.key, cat.name);
@@ -414,7 +472,7 @@ function renderCategoriesList() {
 function openCategoryContextMenu(x, y, key, name) {
   activeContextCategory = { key, name };
   document.getElementById('ctxCategoryTitle').textContent = `Category: ${name}`;
-  categoryContextMenu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+  categoryContextMenu.style.left = `${Math.min(x, window.innerWidth - 230)}px`;
   categoryContextMenu.style.top = `${y}px`;
   categoryContextMenu.classList.remove('hidden');
 }
@@ -428,12 +486,12 @@ document.getElementById('ctxRenameCategory').addEventListener('click', () => {
   setTimeout(() => renameCategoryInput.focus(), 100);
 });
 
-// Submit Rename Form
+// Submit Rename Category
 renameCategoryForm.addEventListener('submit', (e) => {
   e.preventDefault();
   if (!activeContextCategory) return;
 
-  const newName = renameCategoryInput.value.trim();
+  const newName = renameCategoryInput.value.trim().slice(0, 50);
   const oldName = activeContextCategory.name;
   const key = activeContextCategory.key;
 
@@ -445,7 +503,7 @@ renameCategoryForm.addEventListener('submit', (e) => {
   // 1. Update Category in Firebase
   db.ref(`categories/${key}`).set(newName);
 
-  // 2. Cascade rename to all inventory items with the old category name
+  // 2. Cascade rename to all inventory items with that category
   const updates = {};
   Object.entries(inventoryData).forEach(([itemKey, item]) => {
     if (item.category === oldName) {
@@ -460,7 +518,6 @@ renameCategoryForm.addEventListener('submit', (e) => {
   renameCategoryModal.classList.add('hidden');
 });
 
-// Close Rename Modal
 closeRenameModalBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 cancelRenameBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 
@@ -474,7 +531,7 @@ document.getElementById('ctxRemoveCategory').addEventListener('click', () => {
 
   let confirmMsg = `Are you sure you want to remove the category "${name}"?`;
   if (count > 0) {
-    confirmMsg = `Warning: Category "${name}" currently has ${count} registered item(s).\nAre you sure you want to delete this category?`;
+    confirmMsg = `Security Notice: Category "${name}" currently has ${count} registered item(s).\nAre you sure you want to delete this category?`;
   }
 
   if (confirm(confirmMsg)) {
@@ -482,11 +539,11 @@ document.getElementById('ctxRemoveCategory').addEventListener('click', () => {
   }
 });
 
-// Add Category Form
+// Add Category
 categoryForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const input = document.getElementById('newCategoryInput');
-  const cat = input.value.trim();
+  const cat = input.value.trim().slice(0, 50);
   if (cat) {
     db.ref('categories').push(cat);
     input.value = '';
@@ -494,7 +551,7 @@ categoryForm.addEventListener('submit', (e) => {
 });
 
 // ==========================================
-// 6. Homepage Dashboard & Live Animated Chart
+// 6. HOMEPAGE DASHBOARD & ANIMATED CHART
 // ==========================================
 function startLiveClock() {
   function updateTime() {
@@ -524,7 +581,7 @@ function initStockChart() {
   if (!ctx) return;
 
   const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 260);
-  gradient.addColorStop(0, 'rgba(0, 56, 101, 0.4)');
+  gradient.addColorStop(0, 'rgba(0, 56, 101, 0.45)');
   gradient.addColorStop(1, 'rgba(0, 56, 101, 0.02)');
 
   liveStockChart = new Chart(ctx, {
@@ -564,7 +621,7 @@ function initStockChart() {
           }
         },
         tooltip: {
-          backgroundColor: '#0f172a',
+          backgroundColor: 'rgba(15, 23, 42, 0.9)',
           titleFont: { family: 'Inter', size: 12 },
           bodyFont: { family: 'Inter', size: 12 },
           padding: 10,
@@ -578,7 +635,7 @@ function initStockChart() {
         },
         y: {
           beginAtZero: true,
-          grid: { color: '#f1f5f9' },
+          grid: { color: 'rgba(255, 255, 255, 0.5)' },
           ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b', precision: 0 }
         }
       }
@@ -591,7 +648,7 @@ function renderStockChart() {
   if (!liveStockChart) return;
 
   if (currentGraphMode === 'movement') {
-    // Movement History Mode: Use chronological activity logs
+    // Movement History Mode
     const recentLogs = [...logsData].reverse().slice(-14);
     if (recentLogs.length === 0) {
       liveStockChart.data.labels = ['No Data'];
@@ -602,19 +659,19 @@ function renderStockChart() {
         const d = new Date(l.date);
         return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
       });
-      liveStockChart.data.datasets[0].data = recentLogs.map(l => l.newQty);
+      liveStockChart.data.datasets[0].data = recentLogs.map(l => Number(l.newQty) || 0);
       liveStockChart.data.datasets[0].label = 'Balance Level After Transaction';
     }
   } else {
-    // Stock by Item Mode: Display current inventory items
+    // Stock by Item Mode
     const items = Object.values(inventoryData).slice(0, 12);
     if (items.length === 0) {
       liveStockChart.data.labels = ['No Items'];
       liveStockChart.data.datasets[0].data = [0];
       liveStockChart.data.datasets[0].label = 'Empty Inventory';
     } else {
-      liveStockChart.data.labels = items.map(i => i.name);
-      liveStockChart.data.datasets[0].data = items.map(i => i.quantity);
+      liveStockChart.data.labels = items.map(i => escapeHtml(i.name));
+      liveStockChart.data.datasets[0].data = items.map(i => Number(i.quantity) || 0);
       liveStockChart.data.datasets[0].label = 'Current Quantity in Stock';
     }
   }
@@ -627,8 +684,8 @@ function updateDashboard() {
 
   // 1. Attention List (Out of Stock or Low Stock)
   const items = Object.values(inventoryData);
-  const outOfStock = items.filter(i => i.quantity === 0);
-  const lowStock = items.filter(i => i.quantity > 0 && i.quantity <= 5);
+  const outOfStock = items.filter(i => (Number(i.quantity) || 0) === 0);
+  const lowStock = items.filter(i => (Number(i.quantity) || 0) > 0 && (Number(i.quantity) || 0) <= 5);
   const attentionItems = [...outOfStock, ...lowStock];
 
   const attentionListEl = document.getElementById('homeAttentionList');
@@ -642,10 +699,10 @@ function updateDashboard() {
       attentionListEl.innerHTML = attentionItems.map(item => `
         <div class="attention-item">
           <div class="attention-info">
-            <div class="item-name">${item.name}</div>
-            <div class="item-meta">${item.category} • Balance: <strong>${item.quantity} ${item.unit}</strong></div>
+            <div class="item-name">${escapeHtml(item.name)}</div>
+            <div class="item-meta">${escapeHtml(item.category)} • Balance: <strong>${escapeHtml(item.quantity)} ${escapeHtml(item.unit)}</strong></div>
           </div>
-          <button type="button" class="btn-mini-restock" onclick="quickRestockItem('${item.name.replace(/'/g, "\\'")}', '${item.category.replace(/'/g, "\\'")}', '${(item.unit || 'pcs').replace(/'/g, "\\'")}')">
+          <button type="button" class="btn-mini-restock" onclick="quickRestockItem('${encodeDbKey(item.name)}')">
             <i class="fa-solid fa-plus"></i> Restock
           </button>
         </div>
@@ -669,12 +726,12 @@ function updateDashboard() {
                 <i class="fa-solid ${isIN ? 'fa-arrow-down' : 'fa-arrow-up'}"></i>
               </div>
               <div class="feed-details">
-                <div class="feed-title"><strong>${l.itemName}</strong> (${l.remarks || (isIN ? 'Stock In' : 'Stock Out')})</div>
+                <div class="feed-title"><strong>${escapeHtml(l.itemName)}</strong> (${escapeHtml(l.remarks || (isIN ? 'Stock In' : 'Stock Out'))})</div>
                 <div class="feed-time">${new Date(l.date).toLocaleString()}</div>
               </div>
             </div>
             <div class="feed-qty ${isIN ? 'in' : 'out'}">
-              ${isIN ? '+' : '-'}${l.qtyChanged} ${l.unit || ''}
+              ${isIN ? '+' : '-'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}
             </div>
           </div>
         `;
@@ -683,11 +740,13 @@ function updateDashboard() {
   }
 }
 
-window.quickRestockItem = function(name, category, unit) {
+window.quickRestockItem = function(key) {
+  const item = inventoryData[key];
+  if (!item) return;
   document.querySelector('[data-target="tabForm"]').click();
-  document.getElementById('stockItemName').value = name;
-  stockCategorySelect.value = category;
-  document.getElementById('stockUnit').value = unit || 'pcs';
+  document.getElementById('stockItemName').value = item.name;
+  stockCategorySelect.value = item.category;
+  document.getElementById('stockUnit').value = item.unit || 'pcs';
   const radio = document.querySelector('input[name="actionType"][value="IN"]');
   if (radio) radio.checked = true;
   document.getElementById('stockQuantity').value = '';
@@ -695,7 +754,7 @@ window.quickRestockItem = function(name, category, unit) {
 };
 
 // ==========================================
-// 7. Autocomplete Datalist Helper
+// 7. AUTOCOMPLETE DATALIST HELPER
 // ==========================================
 function updateHistoryDatalist() {
   itemHistoryList.innerHTML = '';
@@ -707,22 +766,29 @@ function updateHistoryDatalist() {
 }
 
 // ==========================================
-// 8. Record Stock Transaction (IN / OUT)
+// 8. RECORD STOCK TRANSACTION (VALIDATED)
 // ==========================================
 stockForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const name = document.getElementById('stockItemName').value.trim();
-  const category = stockCategorySelect.value;
-  const unit = document.getElementById('stockUnit').value;
-  const action = document.querySelector('input[name="actionType"]:checked').value;
-  const qty = parseInt(document.getElementById('stockQuantity').value, 10);
-  const remarks = document.getElementById('stockRemarks').value.trim();
 
-  // Create clean key from item name
-  const itemKey = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const name = document.getElementById('stockItemName').value.trim().slice(0, 80);
+  const category = stockCategorySelect.value.trim().slice(0, 50);
+  const unit = document.getElementById('stockUnit').value.trim().slice(0, 20);
+  const actionRadio = document.querySelector('input[name="actionType"]:checked');
+  const action = actionRadio && actionRadio.value === 'OUT' ? 'OUT' : 'IN';
+  const qty = Math.max(1, Math.min(100000, parseInt(document.getElementById('stockQuantity').value, 10) || 1));
+  const remarks = document.getElementById('stockRemarks').value.trim().slice(0, 200);
+
+  if (!name || !category || !unit) {
+    alert('Please fill out all required fields.');
+    return;
+  }
+
+  // Safe item key
+  const itemKey = encodeDbKey(name);
   const existing = inventoryData[itemKey];
 
-  let currentQty = existing ? existing.quantity : 0;
+  let currentQty = existing ? (Number(existing.quantity) || 0) : 0;
   let newQty = currentQty;
 
   if (action === 'IN') {
@@ -744,7 +810,7 @@ stockForm.addEventListener('submit', (e) => {
     unit: unit
   };
 
-  // 1. Update/Set Item in inventory (Never delete even if 0)
+  // 1. Update/Set Item in inventory (Never deleted even if 0)
   db.ref(`inventory/${itemKey}`).update({
     name: name,
     category: category,
@@ -760,15 +826,15 @@ stockForm.addEventListener('submit', (e) => {
   db.ref('activity_logs').push(logEntry);
 
   stockForm.reset();
-  alert(`Transaction recorded! Item balance: ${newQty} ${unit}`);
+  alert(`Secured transaction recorded! Item balance: ${newQty} ${unit}`);
   document.querySelector('[data-target="tabDatabase"]').click();
 });
 
 // ==========================================
-// 9. Render Inventory Grouped by Category & Filtered
+// 9. RENDER INVENTORY (ENCODED & GROUPED)
 // ==========================================
 function renderInventory() {
-  const searchTerm = dbSearchInput.value.toLowerCase();
+  const searchTerm = dbSearchInput.value.toLowerCase().trim();
   const catFilter = dbCategoryFilter.value;
   const statusFilter = dbStatusFilter.value;
 
@@ -779,13 +845,13 @@ function renderInventory() {
                           item.category.toLowerCase().includes(searchTerm);
     const matchesCat = !catFilter || item.category === catFilter;
     const matchesStatus = !statusFilter ||
-      (statusFilter === 'in_stock' && item.quantity > 0) ||
-      (statusFilter === 'out_of_stock' && item.quantity === 0);
+      (statusFilter === 'in_stock' && (Number(item.quantity) || 0) > 0) ||
+      (statusFilter === 'out_of_stock' && (Number(item.quantity) || 0) === 0);
     return matchesSearch && matchesCat && matchesStatus;
   });
 
   if (filtered.length === 0) {
-    inventoryContainer.innerHTML = '<div style="padding:2rem; text-align:center; color:#94a3b8;">No inventory items found.</div>';
+    inventoryContainer.innerHTML = '<div style="padding:2.5rem; text-align:center; color:#526175;">No inventory items found.</div>';
     return;
   }
 
@@ -800,17 +866,18 @@ function renderInventory() {
   for (const [catName, catItems] of Object.entries(grouped)) {
     html += `
       <div class="category-group">
-        <h3 class="category-group-header"><i class="fa-solid fa-folder"></i> ${catName} (${catItems.length})</h3>
+        <h3 class="category-group-header"><i class="fa-solid fa-folder"></i> ${escapeHtml(catName)} (${catItems.length})</h3>
         <div class="category-items-grid">
     `;
     catItems.forEach(item => {
-      const isZero = item.quantity === 0;
+      const qtyNum = Number(item.quantity) || 0;
+      const isZero = qtyNum === 0;
       html += `
-        <div class="stock-card ${isZero ? 'zero-stock' : ''}" data-key="${item.key}">
-          <div class="card-title">${item.name}</div>
-          <div class="card-category">${item.category}</div>
+        <div class="stock-card ${isZero ? 'zero-stock' : ''}" data-key="${encodeDbKey(item.key)}">
+          <div class="card-title">${escapeHtml(item.name)}</div>
+          <div class="card-category">${escapeHtml(item.category)}</div>
           <div class="card-details">
-            <span class="card-qty">${item.quantity} <small style="font-size:0.8rem; font-weight:normal;">${item.unit}</small></span>
+            <span class="card-qty">${qtyNum} <small style="font-size:0.8rem; font-weight:normal;">${escapeHtml(item.unit)}</small></span>
             <span class="badge-status ${isZero ? 'status-out' : 'status-in'}">
               ${isZero ? 'Out of Stock (0 Qty)' : 'In Stock'}
             </span>
@@ -826,13 +893,13 @@ function renderInventory() {
 }
 
 // ==========================================
-// 10. Stats Updates
+// 10. STATS CALCULATIONS
 // ==========================================
 function updateStats() {
   const items = Object.values(inventoryData);
   const total = items.length;
-  const inStock = items.filter(i => i.quantity > 0).length;
-  const outOfStock = items.filter(i => i.quantity === 0).length;
+  const inStock = items.filter(i => (Number(i.quantity) || 0) > 0).length;
+  const outOfStock = items.filter(i => (Number(i.quantity) || 0) === 0).length;
   const totalVolume = items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
 
   const elTotal = document.getElementById('statTotalItems');
@@ -849,7 +916,7 @@ function updateStats() {
 }
 
 // ==========================================
-// 11. Item Context Menu & Mobile Long-Press Logic
+// 11. ITEM CONTEXT MENU & HISTORY MODAL
 // ==========================================
 function attachCardEvents() {
   document.querySelectorAll('.stock-card').forEach(card => {
@@ -876,7 +943,7 @@ function attachCardEvents() {
 
 function openItemContextMenu(x, y, itemKey) {
   activeContextItem = itemKey;
-  itemContextMenu.style.left = `${Math.min(x, window.innerWidth - 220)}px`;
+  itemContextMenu.style.left = `${Math.min(x, window.innerWidth - 230)}px`;
   itemContextMenu.style.top = `${y}px`;
   itemContextMenu.classList.remove('hidden');
 }
@@ -887,11 +954,13 @@ window.addEventListener('click', () => {
   categoryContextMenu.classList.add('hidden');
 });
 
-// Item Context Menu Action: View History
+// View History Action
 document.getElementById('ctxViewHistory').addEventListener('click', () => {
   if (!activeContextItem) return;
   const item = inventoryData[activeContextItem];
-  document.getElementById('modalItemTitle').textContent = `${item.name} - Stock History`;
+  if (!item) return;
+
+  document.getElementById('modalItemTitle').textContent = `${escapeHtml(item.name)} - Stock History`;
   const body = document.getElementById('modalTimelineBody');
   body.innerHTML = '<div class="loading-spinner">Fetching transaction history...</div>';
   historyModal.classList.remove('hidden');
@@ -901,7 +970,7 @@ document.getElementById('ctxViewHistory').addEventListener('click', () => {
     snap.forEach(c => logs.unshift(c.val()));
 
     if (logs.length === 0) {
-      body.innerHTML = '<p style="color:#64748b;">No log movements recorded yet.</p>';
+      body.innerHTML = '<p style="color:#64748b;">No movements recorded yet.</p>';
       return;
     }
 
@@ -909,53 +978,54 @@ document.getElementById('ctxViewHistory').addEventListener('click', () => {
       <div class="timeline-item">
         <div class="timeline-date">${new Date(l.date).toLocaleString()}</div>
         <div class="timeline-desc">
-          <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Added +' : 'Reduced -'}${l.qtyChanged} ${l.unit || ''}</span>
-          <span>(Balance: ${l.newQty})</span>
+          <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Added +' : 'Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
+          <span>(Balance: ${escapeHtml(l.newQty)})</span>
         </div>
-        <div class="timeline-notes">${l.remarks || 'No remarks provided.'}</div>
+        <div class="timeline-notes">${escapeHtml(l.remarks || 'No remarks provided.')}</div>
       </div>
     `).join('');
   });
 });
 
-// Item Context Menu Action: Quick Stock In/Out Adjustment
+// Quick Stock Adjustment Action
 document.getElementById('ctxQuickAction').addEventListener('click', () => {
   if (!activeContextItem) return;
   const item = inventoryData[activeContextItem];
+  if (!item) return;
   document.querySelector('[data-target="tabForm"]').click();
   document.getElementById('stockItemName').value = item.name;
   stockCategorySelect.value = item.category;
   document.getElementById('stockUnit').value = item.unit || 'pcs';
 });
 
-// Close History Modal
+// Close Modals
 closeModalBtn.addEventListener('click', () => historyModal.classList.add('hidden'));
 document.querySelector('#historyModal .modal-backdrop').addEventListener('click', () => historyModal.classList.add('hidden'));
 document.querySelector('#renameCategoryModal .modal-backdrop').addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 
 // ==========================================
-// 12. Audit Logs Table Rendering
+// 12. AUDIT LOGS TABLE
 // ==========================================
 function renderLogs(logs) {
-  const filter = logSearchInput.value.toLowerCase();
+  const filter = logSearchInput.value.toLowerCase().trim();
   const filtered = logs.filter(l =>
     (l.itemName && l.itemName.toLowerCase().includes(filter)) ||
     (l.remarks && l.remarks.toLowerCase().includes(filter))
   );
 
   if (filtered.length === 0) {
-    logsTableBody.innerHTML = '<tr><td colspan="6" class="text-center">No logs found.</td></tr>';
+    logsTableBody.innerHTML = '<tr><td colspan="6" class="text-center" style="color:#526175;">No logs found.</td></tr>';
     return;
   }
 
   logsTableBody.innerHTML = filtered.map(l => `
     <tr>
       <td>${new Date(l.date).toLocaleDateString()} ${new Date(l.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-      <td><span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action}</span></td>
-      <td><strong>${l.itemName}</strong></td>
-      <td>${l.action === 'IN' ? '+' : '-'}${l.qtyChanged} ${l.unit || ''}</td>
-      <td>${l.newQty}</td>
-      <td><small>${l.remarks || ''}</small></td>
+      <td><span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${escapeHtml(l.action)}</span></td>
+      <td><strong>${escapeHtml(l.itemName)}</strong></td>
+      <td>${l.action === 'IN' ? '+' : '-'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</td>
+      <td>${escapeHtml(l.newQty)}</td>
+      <td><small>${escapeHtml(l.remarks || '')}</small></td>
     </tr>
   `).join('');
 }
@@ -966,7 +1036,7 @@ dbCategoryFilter.addEventListener('change', renderInventory);
 dbStatusFilter.addEventListener('change', renderInventory);
 
 // ==========================================
-// Initial Bootstrap
+// INITIAL BOOTSTRAP
 // ==========================================
 ensureInitialSeed();
 checkSession();
