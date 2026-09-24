@@ -99,6 +99,67 @@ async function computeSecureHash(pin) {
 }
 
 // ==========================================
+// 0.1 NON-BLOCKING GLASS TOAST NOTIFICATION
+// ==========================================
+let toastTimeout = null;
+function showToast(message, type = 'success', title = 'System Updated') {
+  const toastEl = document.getElementById('toastNotification');
+  const iconEl = document.getElementById('toastIcon');
+  const iconWrap = document.getElementById('toastIconWrap');
+  const titleEl = document.getElementById('toastTitle');
+  const msgEl = document.getElementById('toastMessage');
+
+  if (!toastEl) return;
+
+  if (toastTimeout) clearTimeout(toastTimeout);
+
+  titleEl.textContent = title;
+  msgEl.textContent = message;
+
+  iconWrap.className = `toast-icon-wrap ${type}`;
+  if (type === 'success') {
+    iconEl.className = 'fa-solid fa-circle-check';
+  } else if (type === 'warning') {
+    iconEl.className = 'fa-solid fa-triangle-exclamation';
+  } else if (type === 'error') {
+    iconEl.className = 'fa-solid fa-circle-xmark';
+  } else {
+    iconEl.className = 'fa-solid fa-circle-info';
+  }
+
+  toastEl.classList.remove('hidden', 'toast-hide');
+
+  toastTimeout = setTimeout(() => {
+    toastEl.classList.add('toast-hide');
+    setTimeout(() => toastEl.classList.add('hidden'), 250);
+  }, 3200);
+}
+
+// ==========================================
+// 0.2 MASTER INSTANT REFRESH ENGINE
+// ==========================================
+function refreshAllViews() {
+  updateStats();
+  updateDashboard();
+  renderInventory();
+  renderCategoriesList();
+  updateHistoryDatalist();
+  renderLogs(logsData);
+  if (liveStockChart) liveStockChart.resize();
+}
+
+function refreshCategorySelects() {
+  stockCategorySelect.innerHTML = '<option value="">Select Category</option>';
+  dbCategoryFilter.innerHTML = '<option value="">All Categories</option>';
+
+  categoriesData.forEach(cat => {
+    const escaped = escapeHtml(cat.name);
+    stockCategorySelect.insertAdjacentHTML('beforeend', `<option value="${escaped}">${escaped}</option>`);
+    dbCategoryFilter.insertAdjacentHTML('beforeend', `<option value="${escaped}">${escaped}</option>`);
+  });
+}
+
+// ==========================================
 // 1. PRE-SEED DEFAULT ADMIN AND CATEGORIES
 // ==========================================
 async function ensureInitialSeed() {
@@ -114,7 +175,6 @@ async function ensureInitialSeed() {
       });
     } else {
       const val = snap.val();
-      // Auto-migrate legacy plain text password to cryptographic SHA-256 hash
       if (!val.passwordHash || val.password === '1234' || val.password === 'propertyoffice') {
         db.ref('users/property').update({
           passwordHash: defaultHash,
@@ -169,7 +229,6 @@ function setupLoginUI() {
   setTimeout(() => pinInputs[0].focus(), 150);
 }
 
-// Switch between recent account and manual username
 switchUserBtn.addEventListener('click', () => {
   isManualUsernameMode = !isManualUsernameMode;
   if (isManualUsernameMode) {
@@ -192,7 +251,6 @@ function getPasscodeValue() {
   return pinInputs.map(input => input.value).join('');
 }
 
-// Passcode inputs navigation & auto-enter
 pinInputs.forEach((input, index) => {
   input.addEventListener('input', () => {
     const val = input.value.replace(/[^0-9]/g, '');
@@ -201,7 +259,6 @@ pinInputs.forEach((input, index) => {
       pinInputs[index + 1].focus();
     }
 
-    // Auto-enter: Trigger login as soon as 4th digit is typed
     const code = getPasscodeValue();
     if (code.length === 4) {
       attemptLogin();
@@ -227,7 +284,6 @@ pinInputs.forEach((input, index) => {
   });
 });
 
-// Perform Authenticated Sign-in
 async function attemptLogin() {
   loginError.classList.add('hidden');
 
@@ -251,13 +307,10 @@ async function attemptLogin() {
 
   db.ref(`users/${username}`).once('value', (snap) => {
     const user = snap.val();
-
-    // Check SHA-256 hash or fallback for initial setup
     const isHashValid = user && user.passwordHash && user.passwordHash === computedHash;
     const isLegacyValid = user && (user.password === passcode || (username === 'property' && passcode === '1234'));
 
     if (isHashValid || isLegacyValid) {
-      // If legacy plain-text, upgrade immediately to SHA-256 hash
       if (!user.passwordHash) {
         db.ref(`users/${username}`).update({ passwordHash: computedHash });
       }
@@ -302,7 +355,6 @@ logoutBtn.addEventListener('click', () => {
   location.reload();
 });
 
-// Check Session & Enforce Inactivity Expiry (8 hours)
 function checkSession() {
   const sessionStr = localStorage.getItem('nia_session');
   if (sessionStr) {
@@ -355,6 +407,10 @@ document.querySelectorAll('.dock-btn').forEach(btn => {
       if (liveStockChart) liveStockChart.resize();
     } else if (btn.dataset.target === 'tabDatabase') {
       renderInventory();
+    } else if (btn.dataset.target === 'tabCategories') {
+      renderCategoriesList();
+    } else if (btn.dataset.target === 'tabLogs') {
+      renderLogs(logsData);
     }
   });
 });
@@ -371,36 +427,22 @@ window.openStockFormWithAction = function(action) {
 // 4. REALTIME DATA LISTENERS
 // ==========================================
 function initDataListeners() {
-  // Categories Listener
+  // Categories Realtime Listener
   db.ref('categories').on('value', (snap) => {
     categoriesData = [];
-    stockCategorySelect.innerHTML = '<option value="">Select Category</option>';
-    dbCategoryFilter.innerHTML = '<option value="">All Categories</option>';
-
     snap.forEach(child => {
-      const catName = String(child.val() || '');
-      const catKey = child.key;
-      categoriesData.push({ key: catKey, name: catName });
-
-      // Populate form and filter selects safely
-      const escaped = escapeHtml(catName);
-      stockCategorySelect.insertAdjacentHTML('beforeend', `<option value="${escaped}">${escaped}</option>`);
-      dbCategoryFilter.insertAdjacentHTML('beforeend', `<option value="${escaped}">${escaped}</option>`);
+      categoriesData.push({ key: child.key, name: String(child.val() || '') });
     });
-
+    refreshCategorySelects();
     renderCategoriesList();
     updateStats();
     renderInventory();
   });
 
-  // Inventory Listener
+  // Inventory Realtime Listener
   db.ref('inventory').on('value', (snap) => {
     inventoryData = snap.val() || {};
-    renderInventory();
-    renderCategoriesList();
-    updateHistoryDatalist();
-    updateStats();
-    updateDashboard();
+    refreshAllViews();
   });
 
   // Global Activity Logs Listener
@@ -442,19 +484,16 @@ function renderCategoriesList() {
       <i class="fa-solid fa-ellipsis-vertical chip-delete" title="More options"></i>
     `;
 
-    // Right-click for Desktop
     chip.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openCategoryContextMenu(e.pageX, e.pageY, cat.key, cat.name);
     });
 
-    // Tap on option icon
     chip.querySelector('.chip-delete').addEventListener('click', (e) => {
       e.stopPropagation();
       openCategoryContextMenu(e.pageX, e.pageY, cat.key, cat.name);
     });
 
-    // Mobile Long-Press (500ms)
     let touchTimer;
     chip.addEventListener('touchstart', (e) => {
       touchTimer = setTimeout(() => {
@@ -477,7 +516,6 @@ function openCategoryContextMenu(x, y, key, name) {
   categoryContextMenu.classList.remove('hidden');
 }
 
-// Rename Category Action
 document.getElementById('ctxRenameCategory').addEventListener('click', () => {
   if (!activeContextCategory) return;
   categoryContextMenu.classList.add('hidden');
@@ -486,7 +524,7 @@ document.getElementById('ctxRenameCategory').addEventListener('click', () => {
   setTimeout(() => renameCategoryInput.focus(), 100);
 });
 
-// Submit Rename Category
+// Rename Category Submit
 renameCategoryForm.addEventListener('submit', (e) => {
   e.preventDefault();
   if (!activeContextCategory) return;
@@ -500,14 +538,14 @@ renameCategoryForm.addEventListener('submit', (e) => {
     return;
   }
 
-  // 1. Update Category in Firebase
+  // 1. Update Firebase
   db.ref(`categories/${key}`).set(newName);
 
-  // 2. Cascade rename to all inventory items with that category
   const updates = {};
   Object.entries(inventoryData).forEach(([itemKey, item]) => {
     if (item.category === oldName) {
       updates[`inventory/${itemKey}/category`] = newName;
+      item.category = newName;
     }
   });
 
@@ -515,13 +553,20 @@ renameCategoryForm.addEventListener('submit', (e) => {
     db.ref().update(updates);
   }
 
+  // 2. Optimistic Immediate Update
+  const found = categoriesData.find(c => c.key === key);
+  if (found) found.name = newName;
+
   renameCategoryModal.classList.add('hidden');
+  refreshCategorySelects();
+  refreshAllViews();
+  showToast(`Category renamed to "${newName}"`, 'info', 'Category Updated');
 });
 
 closeRenameModalBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 cancelRenameBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 
-// Remove Category Action
+// Remove Category Submit
 document.getElementById('ctxRemoveCategory').addEventListener('click', () => {
   if (!activeContextCategory) return;
   categoryContextMenu.classList.add('hidden');
@@ -536,17 +581,25 @@ document.getElementById('ctxRemoveCategory').addEventListener('click', () => {
 
   if (confirm(confirmMsg)) {
     db.ref(`categories/${key}`).remove();
+    categoriesData = categoriesData.filter(c => c.key !== key);
+    refreshCategorySelects();
+    refreshAllViews();
+    showToast(`Category "${name}" removed`, 'warning', 'Category Deleted');
   }
 });
 
-// Add Category
+// Add Category Form
 categoryForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const input = document.getElementById('newCategoryInput');
   const cat = input.value.trim().slice(0, 50);
   if (cat) {
-    db.ref('categories').push(cat);
+    const newRef = db.ref('categories').push(cat);
+    categoriesData.push({ key: newRef.key, name: cat });
     input.value = '';
+    refreshCategorySelects();
+    refreshAllViews();
+    showToast(`Category "${cat}" added successfully`, 'success', 'Category Created');
   }
 });
 
@@ -566,7 +619,6 @@ function startLiveClock() {
   setInterval(updateTime, 1000);
 }
 
-// Chart Mode Switches
 document.querySelectorAll('.btn-graph-mode').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.btn-graph-mode').forEach(b => b.classList.remove('active'));
@@ -607,7 +659,7 @@ function initStockChart() {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
-        duration: 900,
+        duration: 800,
         easing: 'easeInOutQuart'
       },
       plugins: {
@@ -648,7 +700,6 @@ function renderStockChart() {
   if (!liveStockChart) return;
 
   if (currentGraphMode === 'movement') {
-    // Movement History Mode
     const recentLogs = [...logsData].reverse().slice(-14);
     if (recentLogs.length === 0) {
       liveStockChart.data.labels = ['No Data'];
@@ -663,7 +714,6 @@ function renderStockChart() {
       liveStockChart.data.datasets[0].label = 'Balance Level After Transaction';
     }
   } else {
-    // Stock by Item Mode
     const items = Object.values(inventoryData).slice(0, 12);
     if (items.length === 0) {
       liveStockChart.data.labels = ['No Items'];
@@ -682,7 +732,6 @@ function renderStockChart() {
 function updateDashboard() {
   renderStockChart();
 
-  // 1. Attention List (Out of Stock or Low Stock)
   const items = Object.values(inventoryData);
   const outOfStock = items.filter(i => (Number(i.quantity) || 0) === 0);
   const lowStock = items.filter(i => (Number(i.quantity) || 0) > 0 && (Number(i.quantity) || 0) <= 5);
@@ -710,7 +759,6 @@ function updateDashboard() {
     }
   }
 
-  // 2. Recent Activity Feed
   const feedEl = document.getElementById('homeRecentActivityList');
   if (feedEl) {
     const recent = logsData.slice(0, 5);
@@ -766,7 +814,7 @@ function updateHistoryDatalist() {
 }
 
 // ==========================================
-// 8. RECORD STOCK TRANSACTION (VALIDATED)
+// 8. RECORD STOCK TRANSACTION (VALIDATED & AUTO-REFRESH)
 // ==========================================
 stockForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -780,11 +828,10 @@ stockForm.addEventListener('submit', (e) => {
   const remarks = document.getElementById('stockRemarks').value.trim().slice(0, 200);
 
   if (!name || !category || !unit) {
-    alert('Please fill out all required fields.');
+    showToast('Please fill out all required fields.', 'warning', 'Form Incomplete');
     return;
   }
 
-  // Safe item key
   const itemKey = encodeDbKey(name);
   const existing = inventoryData[itemKey];
 
@@ -810,7 +857,17 @@ stockForm.addEventListener('submit', (e) => {
     unit: unit
   };
 
-  // 1. Update/Set Item in inventory (Never deleted even if 0)
+  // 1. Optimistic Immediate Update
+  inventoryData[itemKey] = {
+    name: name,
+    category: category,
+    unit: unit,
+    quantity: newQty,
+    lastUpdated: timestamp
+  };
+  logsData.unshift(logEntry);
+
+  // 2. Persist to Firebase
   db.ref(`inventory/${itemKey}`).update({
     name: name,
     category: category,
@@ -818,15 +875,19 @@ stockForm.addEventListener('submit', (e) => {
     quantity: newQty,
     lastUpdated: timestamp
   });
-
-  // 2. Append to Item-specific logs
   db.ref(`inventory/${itemKey}/logs`).push(logEntry);
-
-  // 3. Append to Global Activity Logs
   db.ref('activity_logs').push(logEntry);
 
+  // 3. Clear form and trigger auto-refresh across entire system
   stockForm.reset();
-  alert(`Secured transaction recorded! Item balance: ${newQty} ${unit}`);
+  refreshAllViews();
+  showToast(
+    `${name} balance is now ${newQty} ${unit} (${action === 'IN' ? '+' : '-'}${qty})`,
+    'success',
+    'Transaction Recorded'
+  );
+
+  // 4. Switch to Database tab to inspect updated item
   document.querySelector('[data-target="tabDatabase"]').click();
 });
 
@@ -855,7 +916,6 @@ function renderInventory() {
     return;
   }
 
-  // Group by Category
   const grouped = {};
   filtered.forEach(item => {
     if (!grouped[item.category]) grouped[item.category] = [];
@@ -922,13 +982,11 @@ function attachCardEvents() {
   document.querySelectorAll('.stock-card').forEach(card => {
     const key = card.dataset.key;
 
-    // Desktop Right Click
     card.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openItemContextMenu(e.pageX, e.pageY, key);
     });
 
-    // Mobile Long Press Support (500ms)
     let touchTimer;
     card.addEventListener('touchstart', (e) => {
       touchTimer = setTimeout(() => {
@@ -948,13 +1006,11 @@ function openItemContextMenu(x, y, itemKey) {
   itemContextMenu.classList.remove('hidden');
 }
 
-// Close Context Menus on external click
 window.addEventListener('click', () => {
   itemContextMenu.classList.add('hidden');
   categoryContextMenu.classList.add('hidden');
 });
 
-// View History Action
 document.getElementById('ctxViewHistory').addEventListener('click', () => {
   if (!activeContextItem) return;
   const item = inventoryData[activeContextItem];
@@ -987,7 +1043,6 @@ document.getElementById('ctxViewHistory').addEventListener('click', () => {
   });
 });
 
-// Quick Stock Adjustment Action
 document.getElementById('ctxQuickAction').addEventListener('click', () => {
   if (!activeContextItem) return;
   const item = inventoryData[activeContextItem];
@@ -998,7 +1053,6 @@ document.getElementById('ctxQuickAction').addEventListener('click', () => {
   document.getElementById('stockUnit').value = item.unit || 'pcs';
 });
 
-// Close Modals
 closeModalBtn.addEventListener('click', () => historyModal.classList.add('hidden'));
 document.querySelector('#historyModal .modal-backdrop').addEventListener('click', () => historyModal.classList.add('hidden'));
 document.querySelector('#renameCategoryModal .modal-backdrop').addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
