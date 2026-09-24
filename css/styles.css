@@ -625,6 +625,55 @@ html, body {
   font-weight: 600;
   color: #fff;
 }
+.btn-profile-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-size: 0.82rem;
+}
+.btn-profile-badge:hover {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.btn-profile-badge .profile-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.btn-profile-badge .profile-tag {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+/* Lucide Icons & Global Icons Sizing */
+[data-lucide], svg.lucide {
+  display: inline-block;
+  vertical-align: middle;
+  stroke-width: 2.2;
+  flex-shrink: 0;
+}
+.input-icon-wrap .input-icon {
+  position: absolute;
+  left: 0.95rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  width: 1.15rem;
+  height: 1.15rem;
+  pointer-events: none;
+}
+.modal-md { max-width: 480px; }
 
 /* ====================================================
    7. MAIN CONTENT LAYOUT & DASHBOARD

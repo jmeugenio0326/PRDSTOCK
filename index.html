@@ -5,17 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta name="referrer" content="no-referrer">
-  <title>NIA - Property Office Inventory System</title>
+  <title>National Irrigation Administration - Property & Supplies Office</title>
+  
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            nia: {
+              DEFAULT: '#003865',
+              dark: '#002240',
+              light: '#005a9e',
+              accent: '#0f766e',
+              gold: '#d97706'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN (100% SVG, Zero Missing Font Box Glitches) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
   <!-- Chart.js for Animated Live Graphs -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
   <!-- Firebase SDKs (Compat) -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
@@ -30,7 +57,7 @@
     <div class="login-card glass-panel">
       <div class="login-header">
         <div class="brand-shield glass-icon">
-          <i class="fa-solid fa-building-shield"></i>
+          <i data-lucide="shield-check" class="w-8 h-8"></i>
         </div>
         <h2>National Irrigation Administration</h2>
         <p>Property & Supplies Management Office</p>
@@ -39,15 +66,15 @@
       <!-- Recent Logins Quick Account Card -->
       <div id="recentLoginCard" class="recent-login-card glass-subpanel">
         <div class="recent-avatar">
-          <i class="fa-solid fa-user-shield"></i>
+          <i data-lucide="shield" class="w-6 h-6"></i>
         </div>
         <div class="recent-info">
-          <div class="recent-label"><i class="fa-solid fa-shield-halved"></i> Verified Profile</div>
-          <div class="recent-name" id="recentUsername">property</div>
-          <div class="recent-role">Property Custodian</div>
+          <div class="recent-label"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Verified Profile</div>
+          <div class="recent-name" id="recentUsername">Administrator</div>
+          <div class="recent-role">Property Custodian (@property)</div>
         </div>
         <button type="button" id="switchUserBtn" class="btn-switch-user" title="Switch Account">
-          <i class="fa-solid fa-arrows-rotate"></i>
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
         </button>
       </div>
 
@@ -58,7 +85,7 @@
         <div class="form-group hidden" id="usernameGroup">
           <label for="loginUsername">Username</label>
           <div class="input-icon-wrap">
-            <i class="fa-solid fa-user"></i>
+            <i data-lucide="user" class="input-icon"></i>
             <input type="text" id="loginUsername" placeholder="Enter username" autocomplete="off" maxlength="40">
           </div>
         </div>
@@ -74,7 +101,7 @@
           </div>
           <div class="passcode-hint">Default passcode: <strong>1234</strong></div>
           <div class="security-indicator">
-            <i class="fa-solid fa-lock"></i> <span>Hardware-accelerated SHA-256 encrypted authentication</span>
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i> <span>Hardware-accelerated SHA-256 encrypted authentication</span>
           </div>
         </div>
       </form>
@@ -87,13 +114,21 @@
     <header class="app-header glass-header">
       <div class="header-brand">
         <div class="header-icon-box">
-          <i class="fa-solid fa-boxes-stacked"></i>
+          <i data-lucide="boxes" class="w-5 h-5"></i>
         </div>
         <h1>National Irrigation Administration - Property Office</h1>
       </div>
       <div class="header-user">
-        <span class="badge badge-admin glass-pill"><i class="fa-solid fa-user-shield"></i> <span id="currentAccountBadge">property</span></span>
-        <button id="logoutBtn" class="btn-icon glass-icon-btn" title="Secure Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+        <!-- Administrator Profile Trigger Button -->
+        <button type="button" id="profileBtn" class="btn-profile-badge glass-pill" title="Administrator Profile & Security">
+          <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+          <span class="profile-name">Administrator</span>
+          <span class="profile-tag">(@property)</span>
+        </button>
+        <!-- Logout Button -->
+        <button id="logoutBtn" class="btn-icon glass-icon-btn" title="Secure Logout">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+        </button>
       </div>
     </header>
 
@@ -105,7 +140,7 @@
         <!-- Welcome Hero Banner -->
         <div class="dashboard-hero glass-hero">
           <div class="hero-text">
-            <h2>Welcome back, <span id="heroUserName">Property Custodian</span></h2>
+            <h2>Welcome back, <span id="heroUserName">Administrator</span></h2>
             <p>Property & Supplies Management Dashboard</p>
           </div>
           <div class="hero-live-badge glass-pill">
@@ -117,35 +152,35 @@
         <!-- Quick Access / Stats Bar -->
         <div class="stats-overview">
           <div class="stat-card glass-panel">
-            <div class="stat-icon icon-blue"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <div class="stat-icon icon-blue"><i data-lucide="boxes" class="w-6 h-6"></i></div>
             <div>
               <div class="stat-value" id="statTotalItems">0</div>
               <div class="stat-label">Total Unique Items</div>
             </div>
           </div>
           <div class="stat-card glass-panel">
-            <div class="stat-icon icon-teal"><i class="fa-solid fa-cubes"></i></div>
+            <div class="stat-icon icon-teal"><i data-lucide="layers" class="w-6 h-6"></i></div>
             <div>
               <div class="stat-value" id="statTotalVolume">0</div>
               <div class="stat-label">Total Units in Stock</div>
             </div>
           </div>
           <div class="stat-card glass-panel">
-            <div class="stat-icon icon-green"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="stat-icon icon-green"><i data-lucide="check-circle-2" class="w-6 h-6"></i></div>
             <div>
               <div class="stat-value" id="statInStock">0</div>
               <div class="stat-label">In Stock</div>
             </div>
           </div>
           <div class="stat-card glass-panel">
-            <div class="stat-icon icon-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="stat-icon icon-red"><i data-lucide="alert-triangle" class="w-6 h-6"></i></div>
             <div>
               <div class="stat-value" id="statOutOfStock">0</div>
               <div class="stat-label">Out of Stock</div>
             </div>
           </div>
           <div class="stat-card glass-panel">
-            <div class="stat-icon icon-purple"><i class="fa-solid fa-tags"></i></div>
+            <div class="stat-icon icon-purple"><i data-lucide="tags" class="w-6 h-6"></i></div>
             <div>
               <div class="stat-value" id="statCategories">0</div>
               <div class="stat-label">Categories</div>
@@ -157,7 +192,7 @@
         <div class="card graph-card glass-panel">
           <div class="card-header-flex">
             <div>
-              <h2 class="graph-title"><i class="fa-solid fa-chart-line"></i> Animated Live Stock Line Graph</h2>
+              <h2 class="graph-title"><i data-lucide="line-chart" class="w-5 h-5"></i> Animated Live Stock Line Graph</h2>
               <p class="subtitle" style="margin-bottom: 0;">Real-time inventory level trends & movement activity</p>
             </div>
             <div class="graph-mode-toggle glass-segmented">
@@ -175,7 +210,7 @@
           <!-- Critical Attention / Low Stock -->
           <div class="card glass-panel">
             <div class="card-header-flex">
-              <h2><i class="fa-solid fa-triangle-exclamation" style="color:var(--danger);"></i> Restock Needed / Out of Stock</h2>
+              <h2><i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i> Restock Needed / Out of Stock</h2>
               <span class="badge-count glass-pill" id="outOfStockCountBadge">0</span>
             </div>
             <div id="homeAttentionList" class="attention-list">
@@ -186,7 +221,7 @@
           <!-- Recent Movements Activity Feed -->
           <div class="card glass-panel">
             <div class="card-header-flex">
-              <h2><i class="fa-solid fa-bolt" style="color:var(--warning);"></i> Recent Activity Feed</h2>
+              <h2><i data-lucide="activity" class="w-5 h-5 text-amber-500"></i> Recent Activity Feed</h2>
               <button type="button" class="btn-link" onclick="document.querySelector('[data-target=\'tabLogs\']').click()">View All</button>
             </div>
             <div id="homeRecentActivityList" class="activity-feed-list">
@@ -198,19 +233,19 @@
         <!-- Quick Shortcut Actions -->
         <div class="quick-actions-bar">
           <button class="quick-action-btn glass-panel" onclick="openStockFormWithAction('IN')">
-            <i class="fa-solid fa-plus-circle" style="color:var(--success);"></i>
+            <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i>
             <span>Record Stock IN</span>
           </button>
           <button class="quick-action-btn glass-panel" onclick="openStockFormWithAction('OUT')">
-            <i class="fa-solid fa-minus-circle" style="color:var(--warning);"></i>
+            <i data-lucide="minus-circle" class="w-5 h-5 text-amber-600"></i>
             <span>Issue Stock OUT</span>
           </button>
           <button class="quick-action-btn glass-panel" onclick="document.querySelector('[data-target=\'tabDatabase\']').click()">
-            <i class="fa-solid fa-magnifying-glass" style="color:var(--primary);"></i>
+            <i data-lucide="search" class="w-5 h-5 text-[#003865]"></i>
             <span>Browse Inventory</span>
           </button>
           <button class="quick-action-btn glass-panel" onclick="document.querySelector('[data-target=\'tabCategories\']').click()">
-            <i class="fa-solid fa-folder-tree" style="color:var(--accent);"></i>
+            <i data-lucide="folder-tree" class="w-5 h-5 text-[#0f766e]"></i>
             <span>Manage Categories</span>
           </button>
         </div>
@@ -220,7 +255,7 @@
       <section id="tabDatabase" class="tab-section">
         <div class="section-toolbar glass-toolbar">
           <div class="search-box">
-            <i class="fa-solid fa-magnifying-glass"></i>
+            <i data-lucide="search" class="input-icon"></i>
             <input type="text" id="dbSearchInput" placeholder="Search item, category, or status..." autocomplete="off">
           </div>
           <div class="filter-group">
@@ -235,14 +270,14 @@
           </div>
         </div>
         <div id="inventoryContainer" class="inventory-grid">
-          <div class="loading-spinner"><i class="fa-solid fa-spinner fa-spin"></i> Loading inventory...</div>
+          <div class="loading-spinner"><i data-lucide="loader-2" class="w-5 h-5 animate-spin inline mr-1"></i> Loading inventory...</div>
         </div>
       </section>
 
       <!-- TAB 2: Fill-Up Form -->
       <section id="tabForm" class="tab-section">
         <div class="card form-card glass-panel">
-          <h2><i class="fa-solid fa-dolly"></i> Stock Management Form</h2>
+          <h2><i data-lucide="truck" class="w-5 h-5 inline mr-1"></i> Stock Management Form</h2>
           <p class="subtitle">Record inventory transactions. Items reducing to 0 will safely mark as Out of Stock without data loss.</p>
           <form id="stockForm" autocomplete="off">
             <div class="form-group">
@@ -277,8 +312,8 @@
               <div class="form-group">
                 <label>Action Type</label>
                 <div class="segmented-control glass-segmented">
-                  <label><input type="radio" name="actionType" value="IN" checked> <span><i class="fa-solid fa-plus"></i> Stock IN</span></label>
-                  <label><input type="radio" name="actionType" value="OUT"> <span><i class="fa-solid fa-minus"></i> Stock OUT</span></label>
+                  <label><input type="radio" name="actionType" value="IN" checked> <span><i data-lucide="plus" class="w-3.5 h-3.5"></i> Stock IN</span></label>
+                  <label><input type="radio" name="actionType" value="OUT"> <span><i data-lucide="minus" class="w-3.5 h-3.5"></i> Stock OUT</span></label>
                 </div>
               </div>
               <div class="form-group">
@@ -290,7 +325,7 @@
               <label for="stockRemarks">Remarks / Purpose / Reference</label>
               <input type="text" id="stockRemarks" placeholder="e.g., PO #1024 or Issued to Engineering Section" maxlength="200">
             </div>
-            <button type="submit" class="btn btn-primary btn-block glass-btn"><i class="fa-solid fa-floppy-disk"></i> Record Secured Transaction</button>
+            <button type="submit" class="btn btn-primary btn-block glass-btn"><i data-lucide="save" class="w-4 h-4"></i> Record Secured Transaction</button>
           </form>
         </div>
       </section>
@@ -299,7 +334,7 @@
       <section id="tabLogs" class="tab-section">
         <div class="card glass-panel">
           <div class="card-header-flex">
-            <h2><i class="fa-solid fa-clock-rotate-left"></i> Transaction Audit Log</h2>
+            <h2><i data-lucide="history" class="w-5 h-5 inline mr-1"></i> Transaction Audit Log</h2>
             <input type="text" id="logSearchInput" class="compact-search glass-input" placeholder="Search logs..." autocomplete="off">
           </div>
           <div class="table-responsive">
@@ -326,13 +361,13 @@
       <section id="tabCategories" class="tab-section">
         <div class="card glass-panel">
           <div class="card-header-flex">
-            <h2><i class="fa-solid fa-folder-tree"></i> Category Management</h2>
+            <h2><i data-lucide="folder-tree" class="w-5 h-5 inline mr-1"></i> Category Management</h2>
             <span class="badge-count glass-pill" id="categoryTotalBadge">0</span>
           </div>
           <p class="subtitle">Right-click or long-press on any category chip to <strong>Rename</strong> or <strong>Remove</strong> it.</p>
           <form id="categoryForm" class="inline-form" autocomplete="off">
             <input type="text" id="newCategoryInput" placeholder="Enter new category name..." required maxlength="50">
-            <button type="submit" class="btn btn-primary glass-btn"><i class="fa-solid fa-plus"></i> Add Category</button>
+            <button type="submit" class="btn btn-primary glass-btn"><i data-lucide="plus" class="w-4 h-4"></i> Add Category</button>
           </form>
           <div id="categoriesList" class="category-chips-list"></div>
         </div>
@@ -343,23 +378,23 @@
     <!-- Bottom Dock Navigation Bar (Mobile / Desktop) -->
     <nav class="bottom-dock glass-dock">
       <button class="dock-btn active" data-target="tabHome">
-        <i class="fa-solid fa-house"></i>
+        <i data-lucide="home"></i>
         <span>Home</span>
       </button>
       <button class="dock-btn" data-target="tabDatabase">
-        <i class="fa-solid fa-table-cells-large"></i>
+        <i data-lucide="layout-grid"></i>
         <span>Database</span>
       </button>
       <button class="dock-btn" data-target="tabForm">
-        <i class="fa-solid fa-circle-plus"></i>
+        <i data-lucide="plus-circle"></i>
         <span>Stock In/Out</span>
       </button>
       <button class="dock-btn" data-target="tabLogs">
-        <i class="fa-solid fa-clipboard-list"></i>
+        <i data-lucide="clipboard-list"></i>
         <span>Audit Logs</span>
       </button>
       <button class="dock-btn" data-target="tabCategories">
-        <i class="fa-solid fa-tags"></i>
+        <i data-lucide="tags"></i>
         <span>Categories</span>
       </button>
     </nav>
@@ -367,15 +402,15 @@
 
   <!-- Custom Item Context Menu -->
   <div id="itemContextMenu" class="context-menu glass-context-menu hidden">
-    <button id="ctxViewHistory"><i class="fa-solid fa-clock-rotate-left"></i> View Stock In/Out History</button>
-    <button id="ctxQuickAction"><i class="fa-solid fa-pen-to-square"></i> Quick Stock Adjustment</button>
+    <button id="ctxViewHistory"><i data-lucide="history" class="w-4 h-4"></i> View Stock In/Out History</button>
+    <button id="ctxQuickAction"><i data-lucide="edit-3" class="w-4 h-4"></i> Quick Stock Adjustment</button>
   </div>
 
   <!-- Custom Category Context Menu -->
   <div id="categoryContextMenu" class="context-menu glass-context-menu hidden">
     <div class="context-menu-title" id="ctxCategoryTitle">Category Actions</div>
-    <button id="ctxRenameCategory"><i class="fa-solid fa-pen-to-square"></i> Rename Category</button>
-    <button id="ctxRemoveCategory" class="menu-danger"><i class="fa-solid fa-trash-can"></i> Remove Category</button>
+    <button id="ctxRenameCategory"><i data-lucide="edit-2" class="w-4 h-4"></i> Rename Category</button>
+    <button id="ctxRemoveCategory" class="menu-danger"><i data-lucide="trash-2" class="w-4 h-4"></i> Remove Category</button>
   </div>
 
   <!-- Item History Modal -->
@@ -406,9 +441,78 @@
           </div>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary glass-btn-secondary" id="cancelRenameBtn">Cancel</button>
-            <button type="submit" class="btn btn-primary glass-btn"><i class="fa-solid fa-check"></i> Save Changes</button>
+            <button type="submit" class="btn btn-primary glass-btn"><i data-lucide="check" class="w-4 h-4"></i> Save Changes</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Administrator Profile & Change Passcode Modal -->
+  <div id="profileModal" class="modal hidden">
+    <div class="modal-backdrop glass-backdrop"></div>
+    <div class="modal-content modal-md glass-modal">
+      <div class="modal-header">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-full bg-blue-900/10 border border-blue-900/20 text-[#003865] flex items-center justify-center">
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-[#003865] text-base leading-tight">Administrator Profile</h3>
+            <p class="text-xs text-slate-500">Security & Account Settings</p>
+          </div>
+        </div>
+        <button class="modal-close" id="closeProfileModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Profile Overview Card -->
+        <div class="profile-overview-card glass-subpanel mb-4 p-3.5 rounded-xl flex items-center gap-3">
+          <div class="w-12 h-12 rounded-full bg-gradient-to-tr from-[#003865] to-[#0f766e] text-white flex items-center justify-center text-xl shadow-md">
+            <i data-lucide="user-check" class="w-6 h-6"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <h4 class="font-bold text-slate-900 text-base truncate">Administrator</h4>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">Active</span>
+            </div>
+            <p class="text-xs text-slate-500">Property & Supplies Custodian (@property)</p>
+            <div class="mt-1 flex items-center gap-1.5 text-[11px] text-[#0f766e] font-semibold">
+              <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+              <span>Protected by SHA-256 Passcode Encryption</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Change Passcode Form -->
+        <div class="change-passcode-box border border-slate-200/80 bg-white/60 p-4 rounded-xl">
+          <div class="flex items-center gap-2 mb-3">
+            <i data-lucide="key-round" class="w-4 h-4 text-[#003865]"></i>
+            <h4 class="font-bold text-slate-900 text-sm">Change 4-Digit Passcode</h4>
+          </div>
+          <p class="text-xs text-slate-500 mb-3">Enter your current passcode and your new 4-digit passcode once.</p>
+          
+          <form id="changePasscodeForm" autocomplete="off">
+            <div id="changePasscodeError" class="alert error hidden py-2 px-3 text-xs mb-3"></div>
+            
+            <div class="form-group mb-3">
+              <label for="oldPasscode" class="text-xs font-semibold text-slate-700 block mb-1">Current Passcode (4 Digits)</label>
+              <input type="password" id="oldPasscode" pattern="[0-9]*" inputmode="numeric" maxlength="4" placeholder="Enter current 4-digit passcode" required class="glass-input text-sm py-2 px-3 tracking-widest font-mono text-center" autocomplete="current-password">
+            </div>
+
+            <div class="form-group mb-4">
+              <label for="newPasscode" class="text-xs font-semibold text-slate-700 block mb-1">New Passcode (4 Digits)</label>
+              <input type="password" id="newPasscode" pattern="[0-9]*" inputmode="numeric" maxlength="4" placeholder="Enter new 4-digit passcode" required class="glass-input text-sm py-2 px-3 tracking-widest font-mono text-center" autocomplete="new-password">
+              <small class="text-[11px] text-slate-400 mt-1 block">Must be exactly 4 numeric digits (e.g. 1234).</small>
+            </div>
+
+            <div class="modal-actions mt-3 flex justify-end gap-2">
+              <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-3.5" id="cancelProfileModalBtn">Cancel</button>
+              <button type="submit" class="btn btn-primary glass-btn text-xs py-2 px-4" id="savePasscodeBtn">
+                <i data-lucide="check" class="w-3.5 h-3.5 inline mr-1"></i> Update Passcode
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </div>
@@ -416,7 +520,7 @@
   <!-- Glass Toast Notification -->
   <div id="toastNotification" class="toast-glass hidden" role="alert" aria-live="assertive">
     <div class="toast-icon-wrap" id="toastIconWrap">
-      <i id="toastIcon" class="fa-solid fa-circle-check"></i>
+      <i id="toastIcon" data-lucide="check-circle-2"></i>
     </div>
     <div class="toast-body">
       <div class="toast-title" id="toastTitle">System Updated</div>
