@@ -22,7 +22,7 @@ let logsData = [];
 let activeContextItem = null;
 let activeContextCategory = null;
 let activeContextUnit = null;
-let currentGraphMode = 'movement'; // 'movement' or 'levels'
+let currentGraphMode = 'recent'; // 'recent' (10 recent stock items) or 'movement'
 let liveStockChart = null;
 
 // DOM Elements - Login & Auth
@@ -1174,6 +1174,24 @@ function startLiveClock() {
   setInterval(updateTime, 1000);
 }
 
+// ==========================================
+// 7.1 RECENT STOCK ITEMS RETRIEVER (10 RECENT ITEMS)
+// ==========================================
+function getRecentStockItems(limit = 10) {
+  const items = Object.entries(inventoryData).map(([key, val]) => ({ key, ...val }));
+  if (items.length === 0) return [];
+
+  // Sort descending by last updated timestamp (newest activity first)
+  items.sort((a, b) => {
+    const timeA = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+    const timeB = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  // Return the 10 most recent items, arranged horizontally from left to right (newest on right)
+  return items.slice(0, limit).reverse();
+}
+
 document.querySelectorAll('.btn-graph-mode').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.btn-graph-mode').forEach(b => b.classList.remove('active'));
@@ -1188,23 +1206,24 @@ function initStockChart() {
   if (!ctx) return;
 
   const gradient = ctx.getContext('2d').createLinearGradient(0, 0, 0, 260);
-  gradient.addColorStop(0, 'rgba(0, 56, 101, 0.45)');
-  gradient.addColorStop(1, 'rgba(0, 56, 101, 0.02)');
+  gradient.addColorStop(0, 'rgba(0, 56, 101, 0.42)');
+  gradient.addColorStop(0.5, 'rgba(15, 118, 110, 0.20)');
+  gradient.addColorStop(1, 'rgba(15, 118, 110, 0.02)');
 
   liveStockChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: [],
       datasets: [{
-        label: 'Stock Movement Volume',
+        label: 'Current Quantity in Stock',
         data: [],
         borderColor: '#003865',
         borderWidth: 3,
         pointBackgroundColor: '#0f766e',
         pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
+        pointBorderWidth: 2.5,
+        pointRadius: 6,
+        pointHoverRadius: 9,
         backgroundColor: gradient,
         fill: true,
         tension: 0.35
@@ -1214,7 +1233,7 @@ function initStockChart() {
       responsive: true,
       maintainAspectRatio: false,
       animation: {
-        duration: 800,
+        duration: 850,
         easing: 'easeInOutQuart'
       },
       plugins: {
@@ -1224,26 +1243,70 @@ function initStockChart() {
           labels: {
             boxWidth: 12,
             font: { family: 'Inter', size: 12, weight: '600' },
-            color: '#334155'
+            color: '#1e293b'
           }
         },
         tooltip: {
-          backgroundColor: 'rgba(15, 23, 42, 0.9)',
-          titleFont: { family: 'Inter', size: 12 },
-          bodyFont: { family: 'Inter', size: 12 },
+          backgroundColor: 'rgba(15, 23, 42, 0.94)',
+          titleFont: { family: 'Inter', size: 12, weight: '700' },
+          bodyFont: { family: 'Inter', size: 11 },
           padding: 10,
-          cornerRadius: 8
+          cornerRadius: 8,
+          displayColors: false,
+          callbacks: {
+            title: function(context) {
+              const index = context[0].dataIndex;
+              if (currentGraphMode === 'recent') {
+                const recent = getRecentStockItems(10);
+                const item = recent[index];
+                return item ? item.name : context[0].label;
+              }
+              return context[0].label;
+            },
+            label: function(context) {
+              const index = context.dataIndex;
+              if (currentGraphMode === 'recent') {
+                const recent = getRecentStockItems(10);
+                const item = recent[index];
+                if (item) {
+                  const dateStr = item.lastUpdated ? new Date(item.lastUpdated).toLocaleString() : 'Recent Entry';
+                  return [
+                    `Current Quantity: ${item.quantity} ${item.unit || 'pcs'}`,
+                    `Category: ${item.category}`,
+                    `Last Recorded: ${dateStr}`
+                  ];
+                }
+              }
+              return `Balance: ${context.parsed.y}`;
+            }
+          }
         }
       },
       scales: {
         x: {
           grid: { display: false },
-          ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b' }
+          ticks: {
+            font: { family: 'Inter', size: 10, weight: '600' }, // Small font for item names as requested
+            color: '#334155',
+            maxRotation: 20,
+            minRotation: 0,
+            autoSkip: false
+          }
         },
         y: {
           beginAtZero: true,
-          grid: { color: 'rgba(255, 255, 255, 0.5)' },
-          ticks: { font: { family: 'Inter', size: 11 }, color: '#64748b', precision: 0 }
+          grid: { color: 'rgba(203, 213, 225, 0.5)' },
+          ticks: {
+            font: { family: 'Inter', size: 11, weight: '500' },
+            color: '#64748b',
+            precision: 0
+          },
+          title: {
+            display: true,
+            text: 'Quantity in Stock',
+            font: { family: 'Inter', size: 11, weight: '600' },
+            color: '#64748b'
+          }
         }
       }
     }
@@ -1254,7 +1317,24 @@ function renderStockChart() {
   if (!liveStockChart) initStockChart();
   if (!liveStockChart) return;
 
-  if (currentGraphMode === 'movement') {
+  if (currentGraphMode === 'recent') {
+    const recentItems = getRecentStockItems(10);
+    if (recentItems.length === 0) {
+      liveStockChart.data.labels = ['No Stock Items'];
+      liveStockChart.data.datasets[0].data = [0];
+      liveStockChart.data.datasets[0].label = 'No Items in Inventory';
+    } else {
+      liveStockChart.data.labels = recentItems.map(item => {
+        const name = item.name || '';
+        return name.length > 14 ? name.slice(0, 13) + '…' : name;
+      });
+      liveStockChart.data.datasets[0].data = recentItems.map(item => Number(item.quantity) || 0);
+      liveStockChart.data.datasets[0].label = '10 Recent Stock Items (Current Quantity)';
+    }
+    if (liveStockChart.options.scales && liveStockChart.options.scales.y && liveStockChart.options.scales.y.title) {
+      liveStockChart.options.scales.y.title.text = 'Quantity in Stock';
+    }
+  } else {
     const recentLogs = [...logsData].reverse().slice(-14);
     if (recentLogs.length === 0) {
       liveStockChart.data.labels = ['No Data'];
@@ -1266,18 +1346,10 @@ function renderStockChart() {
         return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
       });
       liveStockChart.data.datasets[0].data = recentLogs.map(l => Number(l.newQty) || 0);
-      liveStockChart.data.datasets[0].label = 'Balance Level After Transaction';
+      liveStockChart.data.datasets[0].label = 'Movement Balance Level';
     }
-  } else {
-    const items = Object.values(inventoryData).slice(0, 12);
-    if (items.length === 0) {
-      liveStockChart.data.labels = ['No Items'];
-      liveStockChart.data.datasets[0].data = [0];
-      liveStockChart.data.datasets[0].label = 'Empty Inventory';
-    } else {
-      liveStockChart.data.labels = items.map(i => escapeHtml(i.name));
-      liveStockChart.data.datasets[0].data = items.map(i => Number(i.quantity) || 0);
-      liveStockChart.data.datasets[0].label = 'Current Quantity in Stock';
+    if (liveStockChart.options.scales && liveStockChart.options.scales.y && liveStockChart.options.scales.y.title) {
+      liveStockChart.options.scales.y.title.text = 'Units Transacted';
     }
   }
 
@@ -1550,6 +1622,11 @@ function renderInventory() {
       const qtyNum = Number(item.quantity) || 0;
       const isZero = qtyNum === 0;
       const isLow = qtyNum > 0 && qtyNum <= 5;
+      const lastDate = item.lastUpdated ? new Date(item.lastUpdated) : null;
+      const dateDisplay = lastDate 
+        ? `${lastDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • ${lastDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+        : 'Recent Entry';
+
       html += `
         <div class="stock-card ${isZero ? 'zero-stock' : ''} flex flex-col justify-between" data-key="${encodeDbKey(item.key)}">
           <div>
@@ -1559,9 +1636,16 @@ function renderInventory() {
                 ${isZero ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
               </span>
             </div>
-            <div class="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
+            <div class="flex items-center gap-1.5 text-xs text-slate-500 mb-2">
               <i data-lucide="tag" class="w-3.5 h-3.5 text-slate-400"></i>
               <span>${escapeHtml(item.category)}</span>
+            </div>
+            <div class="card-timestamp-bar flex items-center justify-between text-xs mb-2">
+              <div class="flex items-center gap-1.5 min-w-0" title="Latest stock activity date and time">
+                <i data-lucide="calendar-clock" class="w-3.5 h-3.5 text-[#003865] flex-shrink-0"></i>
+                <span class="text-[11px] text-slate-500 font-medium">Activity:</span>
+                <span class="card-timestamp-text font-bold text-slate-800 text-xs truncate">${dateDisplay}</span>
+              </div>
             </div>
           </div>
 
@@ -1612,16 +1696,34 @@ window.openItemHistory = function(itemKey) {
       return;
     }
 
-    body.innerHTML = logs.map(l => `
-      <div class="timeline-item">
-        <div class="timeline-date">${new Date(l.date).toLocaleString()}</div>
-        <div class="timeline-desc">
-          <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Added +' : 'Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
-          <span>(Balance: ${escapeHtml(l.newQty)})</span>
+    body.innerHTML = logs.map(l => {
+      const d = new Date(l.date);
+      const dateFormatted = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      const timeFormatted = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      return `
+        <div class="timeline-item">
+          <div class="timeline-header-noticeable">
+            <div class="timeline-date-badge">
+              <i data-lucide="calendar" class="w-4 h-4 text-[#003865]"></i>
+              <span class="timeline-date-text">${escapeHtml(dateFormatted)}</span>
+            </div>
+            <div class="timeline-time-badge">
+              <i data-lucide="clock" class="w-3.5 h-3.5 text-emerald-600"></i>
+              <span class="timeline-time-text">${escapeHtml(timeFormatted)}</span>
+            </div>
+          </div>
+          <div class="timeline-desc mt-2">
+            <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Stock Added +' : 'Stock Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
+            <span class="font-bold text-slate-700 ml-1.5">(New Balance: <strong class="text-[#003865]">${escapeHtml(l.newQty)} ${escapeHtml(l.unit || '')}</strong>)</span>
+          </div>
+          <div class="timeline-notes mt-1.5 text-xs text-slate-600">
+            <span class="font-semibold text-slate-500">Remarks:</span> ${escapeHtml(l.remarks || 'Standard stock transaction')}
+          </div>
         </div>
-        <div class="timeline-notes">${escapeHtml(l.remarks || 'No remarks provided.')}</div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
+    refreshIcons();
   });
 };
 

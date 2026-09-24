@@ -1566,26 +1566,89 @@ html, body {
 }
 
 .timeline-item {
-  border-left: 2px solid rgba(0, 56, 101, 0.2);
-  padding-left: 1.1rem;
-  margin-bottom: 1rem;
+  border-left: 2.5px solid rgba(0, 56, 101, 0.28);
+  padding-left: 1.25rem;
+  margin-bottom: 1.25rem;
   position: relative;
   word-break: break-word;
 }
 .timeline-item::before {
   content: '';
   position: absolute;
-  left: -5px;
-  top: 4px;
-  width: 8px;
-  height: 8px;
+  left: -6px;
+  top: 6px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 0 3px rgba(0, 56, 101, 0.15);
+  background: #003865;
+  box-shadow: 0 0 0 4px rgba(0, 56, 101, 0.2);
 }
-.timeline-date { font-size: 0.75rem; color: var(--text-muted); }
-.timeline-desc { font-size: 0.86rem; font-weight: 600; margin-top: 2px; }
-.timeline-notes { font-size: 0.8rem; color: var(--text-muted); }
+.timeline-header-noticeable {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+.timeline-date-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: rgba(0, 56, 101, 0.08);
+  border: 1px solid rgba(0, 56, 101, 0.22);
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+.timeline-date-text {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #003865;
+  letter-spacing: -0.2px;
+}
+.timeline-time-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.timeline-time-text {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #047857;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.timeline-date {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #003865;
+}
+.timeline-desc {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.timeline-notes {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.card-timestamp-bar {
+  background: rgba(241, 245, 249, 0.85);
+  border-radius: 8px;
+  padding: 0.3rem 0.65rem;
+  margin-top: 0.45rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+.card-timestamp-text {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1e293b;
+}
 
 /* ====================================================
    13. GLASS TOAST NOTIFICATION
