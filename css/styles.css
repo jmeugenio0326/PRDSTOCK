@@ -1216,15 +1216,64 @@ html, body {
   border-radius: 12px;
   flex-shrink: 0;
 }
-.chip-delete {
+.btn-category-options {
+  background: transparent;
+  border: none;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
   color: var(--text-muted);
-  font-size: 0.82rem;
-  transition: color 0.15s;
+  transition: all 0.18s ease;
   flex-shrink: 0;
 }
-.chip-delete:hover {
-  color: var(--danger);
+.btn-category-options:hover {
+  background: rgba(0, 56, 101, 0.12);
+  color: var(--primary);
+  transform: scale(1.15);
+}
+
+.btn-card-action {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-card-action:hover {
+  background: #fff;
+  color: var(--primary);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 56, 101, 0.12);
+}
+
+.confirm-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px dashed rgba(203, 213, 225, 0.7);
+  font-size: 0.78rem;
+}
+.confirm-detail-row:last-child {
+  border-bottom: none;
+}
+.confirm-detail-label {
+  font-weight: 600;
+  color: #475569;
+}
+.confirm-detail-value {
+  font-weight: 700;
+  color: #0f172a;
 }
 
 /* ====================================================

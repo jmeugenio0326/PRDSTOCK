@@ -52,6 +52,16 @@ const changePasscodeError = document.getElementById('changePasscodeError');
 const oldPasscodeInput = document.getElementById('oldPasscode');
 const newPasscodeInput = document.getElementById('newPasscode');
 
+// DOM Elements - Confirmation Modal
+const confirmModal = document.getElementById('confirmModal');
+const confirmTitleEl = document.getElementById('confirmTitle');
+const confirmMessageEl = document.getElementById('confirmMessage');
+const confirmDetailsBox = document.getElementById('confirmDetailsBox');
+const acceptConfirmBtn = document.getElementById('acceptConfirmBtn');
+const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
+const closeConfirmModalBtn = document.getElementById('closeConfirmModalBtn');
+let onConfirmCallback = null;
+
 // App DOM Elements - Tabs & Forms
 const stockForm = document.getElementById('stockForm');
 const categoryForm = document.getElementById('categoryForm');
@@ -61,6 +71,8 @@ const stockCategorySelect = document.getElementById('stockCategory');
 const dbCategoryFilter = document.getElementById('dbCategoryFilter');
 const dbSearchInput = document.getElementById('dbSearchInput');
 const dbStatusFilter = document.getElementById('dbStatusFilter');
+const dbResetFiltersBtn = document.getElementById('dbResetFiltersBtn');
+const dbItemsSummaryBadge = document.getElementById('dbItemsSummaryBadge');
 const itemContextMenu = document.getElementById('itemContextMenu');
 const categoryContextMenu = document.getElementById('categoryContextMenu');
 const historyModal = document.getElementById('historyModal');
@@ -85,8 +97,6 @@ function refreshIcons() {
 // ==========================================
 // 0.1 SECURITY & DATA INTEGRITY UTILITIES
 // ==========================================
-
-// Strict HTML Entity Escaper for Anti-XSS
 function escapeHtml(text) {
   if (text === null || text === undefined) return '';
   const map = {
@@ -99,7 +109,6 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
-// Safe Database Key Generator (alphanumeric & underscore only)
 function encodeDbKey(name) {
   return String(name || '')
     .trim()
@@ -108,7 +117,6 @@ function encodeDbKey(name) {
     .slice(0, 80);
 }
 
-// Web Cryptography API: Salted SHA-256 Passcode Hash
 async function computeSecureHash(pin) {
   const encoder = new TextEncoder();
   const saltedPayload = `nia_property_salt_2026_${pin}_secure_auth`;
@@ -156,7 +164,49 @@ function showToast(message, type = 'success', title = 'System Updated') {
 }
 
 // ==========================================
-// 0.3 MASTER INSTANT REFRESH ENGINE
+// 0.3 UNIVERSAL CONFIRMATION MODAL HELPER
+// ==========================================
+function openConfirmDialog({ title, message, detailsHtml = '', confirmText = 'Confirm & Proceed', confirmBtnClass = 'btn-primary', onConfirm }) {
+  confirmTitleEl.textContent = title || 'Confirm Action';
+  confirmMessageEl.textContent = message || 'Please confirm this action to proceed:';
+
+  if (detailsHtml) {
+    confirmDetailsBox.innerHTML = detailsHtml;
+    confirmDetailsBox.classList.remove('hidden');
+  } else {
+    confirmDetailsBox.innerHTML = '';
+    confirmDetailsBox.classList.add('hidden');
+  }
+
+  acceptConfirmBtn.textContent = confirmText;
+  acceptConfirmBtn.className = `btn glass-btn text-xs py-2 px-4 ${confirmBtnClass}`;
+
+  onConfirmCallback = onConfirm;
+  confirmModal.classList.remove('hidden');
+  refreshIcons();
+}
+
+function closeConfirmDialog() {
+  confirmModal.classList.add('hidden');
+  onConfirmCallback = null;
+}
+
+acceptConfirmBtn.addEventListener('click', () => {
+  if (typeof onConfirmCallback === 'function') {
+    const cb = onConfirmCallback;
+    closeConfirmDialog();
+    cb();
+  } else {
+    closeConfirmDialog();
+  }
+});
+
+cancelConfirmBtn.addEventListener('click', closeConfirmDialog);
+closeConfirmModalBtn.addEventListener('click', closeConfirmDialog);
+document.querySelector('#confirmModal .modal-backdrop').addEventListener('click', closeConfirmDialog);
+
+// ==========================================
+// 0.4 MASTER INSTANT REFRESH ENGINE
 // ==========================================
 function refreshAllViews() {
   updateStats();
@@ -373,9 +423,18 @@ loginForm.addEventListener('submit', (e) => {
   attemptLogin();
 });
 
+// Logout with Confirmation
 logoutBtn.addEventListener('click', () => {
-  localStorage.removeItem('nia_session');
-  location.reload();
+  openConfirmDialog({
+    title: 'Sign Out Confirmation',
+    message: 'Are you sure you want to sign out of the Administrator account?',
+    confirmText: 'Yes, Sign Out',
+    confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700',
+    onConfirm: () => {
+      localStorage.removeItem('nia_session');
+      location.reload();
+    }
+  });
 });
 
 function checkSession() {
@@ -474,17 +533,35 @@ changePasscodeForm.addEventListener('submit', async (e) => {
       return;
     }
 
-    const newHash = await computeSecureHash(newCode);
+    // Confirmation before committing new passcode
+    openConfirmDialog({
+      title: 'Confirm Passcode Update',
+      message: 'Are you sure you want to update your 4-digit passcode?',
+      detailsHtml: `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Account:</span>
+          <span class="confirm-detail-value">Administrator (@${escapeHtml(username)})</span>
+        </div>
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">New Passcode:</span>
+          <span class="confirm-detail-value font-mono tracking-widest text-[#003865]">${escapeHtml(newCode)}</span>
+        </div>
+      `,
+      confirmText: 'Yes, Update Passcode',
+      confirmBtnClass: 'btn-primary',
+      onConfirm: async () => {
+        const newHash = await computeSecureHash(newCode);
 
-    // Update in Firebase
-    await db.ref(`users/${username}`).update({
-      passwordHash: newHash,
-      password: null, // Clear plain text password
-      lastPasscodeChange: new Date().toISOString()
+        await db.ref(`users/${username}`).update({
+          passwordHash: newHash,
+          password: null,
+          lastPasscodeChange: new Date().toISOString()
+        });
+
+        closeProfileModal();
+        showToast(`Passcode updated successfully to "${newCode}"!`, 'success', 'Security Updated');
+      }
     });
-
-    closeProfileModal();
-    showToast(`Passcode updated successfully to "${newCode}"!`, 'success', 'Security Updated');
   });
 });
 
@@ -526,7 +603,6 @@ window.openStockFormWithAction = function(action) {
 // 5. REALTIME DATA LISTENERS
 // ==========================================
 function initDataListeners() {
-  // Categories Realtime Listener
   db.ref('categories').on('value', (snap) => {
     categoriesData = [];
     snap.forEach(child => {
@@ -538,13 +614,11 @@ function initDataListeners() {
     renderInventory();
   });
 
-  // Inventory Realtime Listener
   db.ref('inventory').on('value', (snap) => {
     inventoryData = snap.val() || {};
     refreshAllViews();
   });
 
-  // Global Activity Logs Listener
   db.ref('activity_logs').limitToLast(100).on('value', (snap) => {
     logsData = [];
     snap.forEach(child => {
@@ -560,7 +634,7 @@ function getCategoryItemCount(catName) {
 }
 
 // ==========================================
-// 6. CATEGORY MANAGEMENT (RENAME & REMOVE)
+// 6. CATEGORY MANAGEMENT (CLICKABLE 3-DOTS & CONFIRMATIONS)
 // ==========================================
 function renderCategoriesList() {
   const listEl = document.getElementById('categoriesList');
@@ -573,35 +647,28 @@ function renderCategoriesList() {
   categoriesData.forEach(cat => {
     const count = getCategoryItemCount(cat.name);
     const chip = document.createElement('div');
-    chip.className = 'category-chip';
+    chip.className = 'category-chip glass-subpanel flex items-center justify-between gap-2.5';
     chip.dataset.key = cat.key;
     chip.dataset.name = cat.name;
     chip.innerHTML = `
-      <i data-lucide="folder" class="w-4 h-4 text-[#003865]"></i>
-      <span class="category-chip-name"><strong>${escapeHtml(cat.name)}</strong></span>
-      <span class="category-count-badge" title="${count} item(s) in this category">${count}</span>
-      <i data-lucide="more-vertical" class="w-4 h-4 chip-delete" title="More options"></i>
+      <div class="flex items-center gap-2 min-w-0">
+        <i data-lucide="folder" class="w-4 h-4 text-[#003865] flex-shrink-0"></i>
+        <span class="category-chip-name font-semibold text-slate-800 truncate">${escapeHtml(cat.name)}</span>
+      </div>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <span class="category-count-badge" title="${count} item(s) in this category">${count}</span>
+        <button type="button" class="btn-category-options" data-key="${cat.key}" data-name="${escapeHtml(cat.name)}" title="Category Options">
+          <i data-lucide="more-vertical" class="w-4 h-4 text-slate-600"></i>
+        </button>
+      </div>
     `;
 
-    chip.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      openCategoryContextMenu(e.pageX, e.pageY, cat.key, cat.name);
-    });
-
-    chip.querySelector('.chip-delete').addEventListener('click', (e) => {
+    // Clickable 3-dots button for category options
+    chip.querySelector('.btn-category-options').addEventListener('click', (e) => {
       e.stopPropagation();
-      openCategoryContextMenu(e.pageX, e.pageY, cat.key, cat.name);
+      const rect = e.currentTarget.getBoundingClientRect();
+      openCategoryContextMenu(rect.left - 130, rect.bottom + window.scrollY + 6, cat.key, cat.name);
     });
-
-    let touchTimer;
-    chip.addEventListener('touchstart', (e) => {
-      touchTimer = setTimeout(() => {
-        const touch = e.touches[0];
-        openCategoryContextMenu(touch.pageX, touch.pageY, cat.key, cat.name);
-      }, 500);
-    });
-    chip.addEventListener('touchend', () => clearTimeout(touchTimer));
-    chip.addEventListener('touchmove', () => clearTimeout(touchTimer));
 
     listEl.appendChild(chip);
   });
@@ -612,7 +679,7 @@ function renderCategoriesList() {
 function openCategoryContextMenu(x, y, key, name) {
   activeContextCategory = { key, name };
   document.getElementById('ctxCategoryTitle').textContent = `Category: ${name}`;
-  categoryContextMenu.style.left = `${Math.min(x, window.innerWidth - 230)}px`;
+  categoryContextMenu.style.left = `${Math.max(10, Math.min(x, window.innerWidth - 230))}px`;
   categoryContextMenu.style.top = `${y}px`;
   categoryContextMenu.classList.remove('hidden');
   refreshIcons();
@@ -627,7 +694,7 @@ document.getElementById('ctxRenameCategory').addEventListener('click', () => {
   setTimeout(() => renameCategoryInput.focus(), 100);
 });
 
-// Rename Category Submit
+// Rename Category with Confirmation
 renameCategoryForm.addEventListener('submit', (e) => {
   e.preventDefault();
   if (!activeContextCategory) return;
@@ -641,33 +708,57 @@ renameCategoryForm.addEventListener('submit', (e) => {
     return;
   }
 
-  db.ref(`categories/${key}`).set(newName);
+  const affectedCount = getCategoryItemCount(oldName);
 
-  const updates = {};
-  Object.entries(inventoryData).forEach(([itemKey, item]) => {
-    if (item.category === oldName) {
-      updates[`inventory/${itemKey}/category`] = newName;
-      item.category = newName;
+  openConfirmDialog({
+    title: 'Confirm Category Rename',
+    message: `Are you sure you want to rename "${oldName}" to "${newName}"?`,
+    detailsHtml: `
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Current Name:</span>
+        <span class="confirm-detail-value">${escapeHtml(oldName)}</span>
+      </div>
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">New Name:</span>
+        <span class="confirm-detail-value font-semibold text-[#003865]">${escapeHtml(newName)}</span>
+      </div>
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Affected Items:</span>
+        <span class="confirm-detail-value">${affectedCount} item(s) will be updated</span>
+      </div>
+    `,
+    confirmText: 'Rename Category',
+    confirmBtnClass: 'btn-primary',
+    onConfirm: () => {
+      db.ref(`categories/${key}`).set(newName);
+
+      const updates = {};
+      Object.entries(inventoryData).forEach(([itemKey, item]) => {
+        if (item.category === oldName) {
+          updates[`inventory/${itemKey}/category`] = newName;
+          item.category = newName;
+        }
+      });
+
+      if (Object.keys(updates).length > 0) {
+        db.ref().update(updates);
+      }
+
+      const found = categoriesData.find(c => c.key === key);
+      if (found) found.name = newName;
+
+      renameCategoryModal.classList.add('hidden');
+      refreshCategorySelects();
+      refreshAllViews();
+      showToast(`Category renamed to "${newName}"`, 'info', 'Category Updated');
     }
   });
-
-  if (Object.keys(updates).length > 0) {
-    db.ref().update(updates);
-  }
-
-  const found = categoriesData.find(c => c.key === key);
-  if (found) found.name = newName;
-
-  renameCategoryModal.classList.add('hidden');
-  refreshCategorySelects();
-  refreshAllViews();
-  showToast(`Category renamed to "${newName}"`, 'info', 'Category Updated');
 });
 
 closeRenameModalBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 cancelRenameBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 
-// Remove Category Submit
+// Remove Category with Confirmation
 document.getElementById('ctxRemoveCategory').addEventListener('click', () => {
   if (!activeContextCategory) return;
   categoryContextMenu.classList.add('hidden');
@@ -675,18 +766,30 @@ document.getElementById('ctxRemoveCategory').addEventListener('click', () => {
   const { key, name } = activeContextCategory;
   const count = getCategoryItemCount(name);
 
-  let confirmMsg = `Are you sure you want to remove the category "${name}"?`;
-  if (count > 0) {
-    confirmMsg = `Security Notice: Category "${name}" currently has ${count} registered item(s).\nAre you sure you want to delete this category?`;
-  }
-
-  if (confirm(confirmMsg)) {
-    db.ref(`categories/${key}`).remove();
-    categoriesData = categoriesData.filter(c => c.key !== key);
-    refreshCategorySelects();
-    refreshAllViews();
-    showToast(`Category "${name}" removed`, 'warning', 'Category Deleted');
-  }
+  openConfirmDialog({
+    title: 'Confirm Category Deletion',
+    message: `Are you sure you want to remove the category "${name}"?`,
+    detailsHtml: `
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Category Name:</span>
+        <span class="confirm-detail-value">${escapeHtml(name)}</span>
+      </div>
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Registered Items:</span>
+        <span class="confirm-detail-value ${count > 0 ? 'text-red-600 font-bold' : ''}">${count} item(s)</span>
+      </div>
+      ${count > 0 ? '<p class="text-[11px] text-amber-700 mt-2"><strong>Warning:</strong> Existing items will keep their recorded category name until reassigned.</p>' : ''}
+    `,
+    confirmText: 'Delete Category',
+    confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700',
+    onConfirm: () => {
+      db.ref(`categories/${key}`).remove();
+      categoriesData = categoriesData.filter(c => c.key !== key);
+      refreshCategorySelects();
+      refreshAllViews();
+      showToast(`Category "${name}" removed`, 'warning', 'Category Deleted');
+    }
+  });
 });
 
 // Add Category Form
@@ -918,7 +1021,7 @@ function updateHistoryDatalist() {
 }
 
 // ==========================================
-// 9. RECORD STOCK TRANSACTION (VALIDATED & AUTO-REFRESH)
+// 9. RECORD STOCK TRANSACTION (CONFIRMATION ENGINE)
 // ==========================================
 stockForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -939,64 +1042,97 @@ stockForm.addEventListener('submit', (e) => {
   const itemKey = encodeDbKey(name);
   const existing = inventoryData[itemKey];
 
-  let currentQty = existing ? (Number(existing.quantity) || 0) : 0;
-  let newQty = currentQty;
+  const currentQty = existing ? (Number(existing.quantity) || 0) : 0;
+  const newQty = action === 'IN' ? currentQty + qty : Math.max(0, currentQty - qty);
 
-  if (action === 'IN') {
-    newQty = currentQty + qty;
-  } else {
-    newQty = Math.max(0, currentQty - qty);
-  }
+  // Open Glass Confirmation Dialog before committing
+  openConfirmDialog({
+    title: 'Confirm Stock Transaction',
+    message: 'Please review and confirm this stock movement before recording:',
+    detailsHtml: `
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Item Name:</span>
+        <span class="confirm-detail-value">${escapeHtml(name)}</span>
+      </div>
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Category:</span>
+        <span class="confirm-detail-value">${escapeHtml(category)}</span>
+      </div>
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Transaction Type:</span>
+        <span class="confirm-detail-value ${action === 'IN' ? 'text-emerald-700' : 'text-amber-700'} font-bold">
+          ${action === 'IN' ? 'Stock IN (+ Added)' : 'Stock OUT (- Deducted)'}
+        </span>
+      </div>
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Quantity:</span>
+        <span class="confirm-detail-value font-bold">${qty} ${escapeHtml(unit)}</span>
+      </div>
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Inventory Balance:</span>
+        <span class="confirm-detail-value font-mono font-bold">${currentQty} &rarr; <span class="text-[#003865]">${newQty} ${escapeHtml(unit)}</span></span>
+      </div>
+      ${remarks ? `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Remarks:</span>
+          <span class="confirm-detail-value italic text-slate-500">${escapeHtml(remarks)}</span>
+        </div>
+      ` : ''}
+    `,
+    confirmText: 'Confirm & Record Transaction',
+    confirmBtnClass: 'btn-primary',
+    onConfirm: () => {
+      const timestamp = new Date().toISOString();
+      const logEntry = {
+        date: timestamp,
+        action: action,
+        qtyChanged: qty,
+        prevQty: currentQty,
+        newQty: newQty,
+        remarks: remarks || (action === 'IN' ? 'Stock Added' : 'Stock Issued'),
+        itemName: name,
+        category: category,
+        unit: unit
+      };
 
-  const timestamp = new Date().toISOString();
-  const logEntry = {
-    date: timestamp,
-    action: action,
-    qtyChanged: qty,
-    prevQty: currentQty,
-    newQty: newQty,
-    remarks: remarks || (action === 'IN' ? 'Stock Added' : 'Stock Issued'),
-    itemName: name,
-    category: category,
-    unit: unit
-  };
+      // 1. Optimistic Immediate Update
+      inventoryData[itemKey] = {
+        name: name,
+        category: category,
+        unit: unit,
+        quantity: newQty,
+        lastUpdated: timestamp
+      };
+      logsData.unshift(logEntry);
 
-  // 1. Optimistic Immediate Update
-  inventoryData[itemKey] = {
-    name: name,
-    category: category,
-    unit: unit,
-    quantity: newQty,
-    lastUpdated: timestamp
-  };
-  logsData.unshift(logEntry);
+      // 2. Persist to Firebase
+      db.ref(`inventory/${itemKey}`).update({
+        name: name,
+        category: category,
+        unit: unit,
+        quantity: newQty,
+        lastUpdated: timestamp
+      });
+      db.ref(`inventory/${itemKey}/logs`).push(logEntry);
+      db.ref('activity_logs').push(logEntry);
 
-  // 2. Persist to Firebase
-  db.ref(`inventory/${itemKey}`).update({
-    name: name,
-    category: category,
-    unit: unit,
-    quantity: newQty,
-    lastUpdated: timestamp
+      // 3. Clear form and trigger auto-refresh across system
+      stockForm.reset();
+      refreshAllViews();
+      showToast(
+        `${name} balance is now ${newQty} ${unit} (${action === 'IN' ? '+' : '-'}${qty})`,
+        'success',
+        'Transaction Recorded'
+      );
+
+      // 4. Switch to Database tab
+      document.querySelector('[data-target="tabDatabase"]').click();
+    }
   });
-  db.ref(`inventory/${itemKey}/logs`).push(logEntry);
-  db.ref('activity_logs').push(logEntry);
-
-  // 3. Clear form and trigger auto-refresh across entire system
-  stockForm.reset();
-  refreshAllViews();
-  showToast(
-    `${name} balance is now ${newQty} ${unit} (${action === 'IN' ? '+' : '-'}${qty})`,
-    'success',
-    'Transaction Recorded'
-  );
-
-  // 4. Switch to Database tab to inspect updated item
-  document.querySelector('[data-target="tabDatabase"]').click();
 });
 
 // ==========================================
-// 10. RENDER INVENTORY (ENCODED & GROUPED)
+// 10. RENDER INVENTORY DATABASE (ENHANCED UI & ARRANGEMENT)
 // ==========================================
 function renderInventory() {
   const searchTerm = dbSearchInput.value.toLowerCase().trim();
@@ -1006,20 +1142,40 @@ function renderInventory() {
   const items = Object.entries(inventoryData).map(([key, val]) => ({ key, ...val }));
 
   const filtered = items.filter(item => {
+    const qtyNum = Number(item.quantity) || 0;
     const matchesSearch = item.name.toLowerCase().includes(searchTerm) ||
-                          item.category.toLowerCase().includes(searchTerm);
+                          item.category.toLowerCase().includes(searchTerm) ||
+                          (item.unit && item.unit.toLowerCase().includes(searchTerm));
     const matchesCat = !catFilter || item.category === catFilter;
-    const matchesStatus = !statusFilter ||
-      (statusFilter === 'in_stock' && (Number(item.quantity) || 0) > 0) ||
-      (statusFilter === 'out_of_stock' && (Number(item.quantity) || 0) === 0);
+    let matchesStatus = true;
+    if (statusFilter === 'in_stock') matchesStatus = qtyNum > 0;
+    else if (statusFilter === 'out_of_stock') matchesStatus = qtyNum === 0;
+    else if (statusFilter === 'low_stock') matchesStatus = qtyNum > 0 && qtyNum <= 5;
+
     return matchesSearch && matchesCat && matchesStatus;
   });
 
+  // Update Summary Badge
+  if (dbItemsSummaryBadge) {
+    dbItemsSummaryBadge.textContent = `${filtered.length} of ${items.length} items displayed`;
+  }
+
   if (filtered.length === 0) {
-    inventoryContainer.innerHTML = '<div style="padding:2.5rem; text-align:center; color:#526175;">No inventory items found.</div>';
+    inventoryContainer.innerHTML = `
+      <div class="card glass-panel text-center py-12 px-4">
+        <i data-lucide="package-search" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+        <h4 class="font-bold text-slate-800 text-base mb-1">No matching items found</h4>
+        <p class="text-xs text-slate-500 mb-4 max-w-sm mx-auto">Try adjusting your search terms or filters to find what you are looking for.</p>
+        <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-1.5 px-3" onclick="resetDbFilters()">
+          Clear Filters
+        </button>
+      </div>
+    `;
+    refreshIcons();
     return;
   }
 
+  // Group by Category
   const grouped = {};
   filtered.forEach(item => {
     if (!grouped[item.category]) grouped[item.category] = [];
@@ -1029,22 +1185,52 @@ function renderInventory() {
   let html = '';
   for (const [catName, catItems] of Object.entries(grouped)) {
     html += `
-      <div class="category-group">
-        <h3 class="category-group-header"><i data-lucide="folder" class="w-4 h-4 inline mr-1 text-[#003865]"></i> ${escapeHtml(catName)} (${catItems.length})</h3>
+      <div class="category-group mb-6">
+        <div class="category-group-header flex items-center justify-between mb-3 pb-2 border-b border-slate-200/60">
+          <div class="flex items-center gap-2">
+            <i data-lucide="folder" class="w-4 h-4 text-[#003865]"></i>
+            <span class="font-bold text-sm text-[#003865]">${escapeHtml(catName)}</span>
+          </div>
+          <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-200/70 text-slate-700">
+            ${catItems.length} item${catItems.length > 1 ? 's' : ''}
+          </span>
+        </div>
         <div class="category-items-grid">
     `;
     catItems.forEach(item => {
       const qtyNum = Number(item.quantity) || 0;
       const isZero = qtyNum === 0;
+      const isLow = qtyNum > 0 && qtyNum <= 5;
       html += `
-        <div class="stock-card ${isZero ? 'zero-stock' : ''}" data-key="${encodeDbKey(item.key)}">
-          <div class="card-title">${escapeHtml(item.name)}</div>
-          <div class="card-category">${escapeHtml(item.category)}</div>
-          <div class="card-details">
-            <span class="card-qty">${qtyNum} <small style="font-size:0.8rem; font-weight:normal;">${escapeHtml(item.unit)}</small></span>
-            <span class="badge-status ${isZero ? 'status-out' : 'status-in'}">
-              ${isZero ? 'Out of Stock (0 Qty)' : 'In Stock'}
-            </span>
+        <div class="stock-card ${isZero ? 'zero-stock' : ''} flex flex-col justify-between" data-key="${encodeDbKey(item.key)}">
+          <div>
+            <div class="flex justify-between items-start gap-2 mb-1.5">
+              <h4 class="card-title text-sm font-bold text-slate-900 leading-tight">${escapeHtml(item.name)}</h4>
+              <span class="badge-status ${isZero ? 'status-out' : (isLow ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'status-in')}">
+                ${isZero ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
+              </span>
+            </div>
+            <div class="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
+              <i data-lucide="tag" class="w-3.5 h-3.5 text-slate-400"></i>
+              <span>${escapeHtml(item.category)}</span>
+            </div>
+          </div>
+
+          <div class="mt-2 pt-2.5 border-t border-slate-200/70 flex items-center justify-between">
+            <div>
+              <span class="text-[11px] text-slate-500 block font-medium">Available Balance</span>
+              <span class="card-qty text-base font-extrabold text-[#003865]">
+                ${qtyNum} <small class="text-xs font-normal text-slate-500">${escapeHtml(item.unit)}</small>
+              </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button type="button" class="btn-card-action" onclick="openItemHistory('${encodeDbKey(item.key)}')" title="View Stock Movement History">
+                <i data-lucide="history" class="w-3.5 h-3.5"></i>
+              </button>
+              <button type="button" class="btn-card-action" onclick="openQuickAdjustment('${encodeDbKey(item.key)}')" title="Record Stock Adjustment">
+                <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -1055,6 +1241,62 @@ function renderInventory() {
   inventoryContainer.innerHTML = html;
   attachCardEvents();
   refreshIcons();
+}
+
+window.openItemHistory = function(itemKey) {
+  activeContextItem = itemKey;
+  const item = inventoryData[itemKey];
+  if (!item) return;
+
+  document.getElementById('modalItemTitle').textContent = `${item.name} - Stock History`;
+  const body = document.getElementById('modalTimelineBody');
+  body.innerHTML = '<div class="loading-spinner"><i data-lucide="loader-2" class="w-5 h-5 animate-spin inline mr-1"></i> Fetching transaction history...</div>';
+  historyModal.classList.remove('hidden');
+  refreshIcons();
+
+  db.ref(`inventory/${itemKey}/logs`).once('value', (snap) => {
+    const logs = [];
+    snap.forEach(c => logs.unshift(c.val()));
+
+    if (logs.length === 0) {
+      body.innerHTML = '<p class="text-xs text-slate-500 py-4 text-center">No transaction logs recorded yet.</p>';
+      return;
+    }
+
+    body.innerHTML = logs.map(l => `
+      <div class="timeline-item">
+        <div class="timeline-date">${new Date(l.date).toLocaleString()}</div>
+        <div class="timeline-desc">
+          <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Added +' : 'Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
+          <span>(Balance: ${escapeHtml(l.newQty)})</span>
+        </div>
+        <div class="timeline-notes">${escapeHtml(l.remarks || 'No remarks provided.')}</div>
+      </div>
+    `).join('');
+  });
+};
+
+window.openQuickAdjustment = function(itemKey) {
+  const item = inventoryData[itemKey];
+  if (!item) return;
+  document.querySelector('[data-target="tabForm"]').click();
+  document.getElementById('stockItemName').value = item.name;
+  stockCategorySelect.value = item.category;
+  document.getElementById('stockUnit').value = item.unit || 'pcs';
+  document.getElementById('stockQuantity').value = '';
+  document.getElementById('stockQuantity').focus();
+  refreshIcons();
+};
+
+window.resetDbFilters = function() {
+  dbSearchInput.value = '';
+  dbCategoryFilter.value = '';
+  dbStatusFilter.value = '';
+  renderInventory();
+};
+
+if (dbResetFiltersBtn) {
+  dbResetFiltersBtn.addEventListener('click', resetDbFilters);
 }
 
 // ==========================================
@@ -1081,7 +1323,7 @@ function updateStats() {
 }
 
 // ==========================================
-// 12. ITEM CONTEXT MENU & HISTORY MODAL
+// 12. ITEM CONTEXT MENU
 // ==========================================
 function attachCardEvents() {
   document.querySelectorAll('.stock-card').forEach(card => {
@@ -1118,47 +1360,11 @@ window.addEventListener('click', () => {
 });
 
 document.getElementById('ctxViewHistory').addEventListener('click', () => {
-  if (!activeContextItem) return;
-  const item = inventoryData[activeContextItem];
-  if (!item) return;
-
-  document.getElementById('modalItemTitle').textContent = `${escapeHtml(item.name)} - Stock History`;
-  const body = document.getElementById('modalTimelineBody');
-  body.innerHTML = '<div class="loading-spinner"><i data-lucide="loader-2" class="w-5 h-5 animate-spin inline mr-1"></i> Fetching transaction history...</div>';
-  historyModal.classList.remove('hidden');
-  refreshIcons();
-
-  db.ref(`inventory/${activeContextItem}/logs`).once('value', (snap) => {
-    const logs = [];
-    snap.forEach(c => logs.unshift(c.val()));
-
-    if (logs.length === 0) {
-      body.innerHTML = '<p style="color:#64748b;">No movements recorded yet.</p>';
-      return;
-    }
-
-    body.innerHTML = logs.map(l => `
-      <div class="timeline-item">
-        <div class="timeline-date">${new Date(l.date).toLocaleString()}</div>
-        <div class="timeline-desc">
-          <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Added +' : 'Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
-          <span>(Balance: ${escapeHtml(l.newQty)})</span>
-        </div>
-        <div class="timeline-notes">${escapeHtml(l.remarks || 'No remarks provided.')}</div>
-      </div>
-    `).join('');
-  });
+  if (activeContextItem) openItemHistory(activeContextItem);
 });
 
 document.getElementById('ctxQuickAction').addEventListener('click', () => {
-  if (!activeContextItem) return;
-  const item = inventoryData[activeContextItem];
-  if (!item) return;
-  document.querySelector('[data-target="tabForm"]').click();
-  document.getElementById('stockItemName').value = item.name;
-  stockCategorySelect.value = item.category;
-  document.getElementById('stockUnit').value = item.unit || 'pcs';
-  refreshIcons();
+  if (activeContextItem) openQuickAdjustment(activeContextItem);
 });
 
 closeModalBtn.addEventListener('click', () => historyModal.classList.add('hidden'));

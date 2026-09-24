@@ -253,22 +253,49 @@
 
       <!-- TAB 1: Inventory Database -->
       <section id="tabDatabase" class="tab-section">
-        <div class="section-toolbar glass-toolbar">
-          <div class="search-box">
-            <i data-lucide="search" class="input-icon"></i>
-            <input type="text" id="dbSearchInput" placeholder="Search item, category, or status..." autocomplete="off">
+        <!-- Database Header Card -->
+        <div class="card glass-panel db-header-card mb-4 p-4">
+          <div class="card-header-flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-blue-900/10 border border-blue-900/20 text-[#003865] flex items-center justify-center">
+                  <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                </div>
+                <h2 class="text-base font-bold text-[#003865] m-0">Property Inventory Database</h2>
+              </div>
+              <p class="subtitle text-xs text-slate-500 mt-1 mb-0">Browse and inspect property supplies organized by classification</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="badge-count glass-pill text-xs font-semibold" id="dbItemsSummaryBadge">Loading items...</span>
+              <button type="button" class="btn btn-primary glass-btn text-xs py-1.5 px-3 flex items-center gap-1.5" onclick="openStockFormWithAction('IN')">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Record Stock
+              </button>
+            </div>
           </div>
-          <div class="filter-group">
-            <select id="dbCategoryFilter" class="glass-select">
-              <option value="">All Categories</option>
-            </select>
-            <select id="dbStatusFilter" class="glass-select">
-              <option value="">All Statuses</option>
-              <option value="in_stock">In Stock</option>
-              <option value="out_of_stock">Out of Stock</option>
-            </select>
+
+          <!-- Section Toolbar with aligned filters -->
+          <div class="section-toolbar glass-toolbar mt-3 pt-3 border-t border-slate-200/60">
+            <div class="search-box">
+              <i data-lucide="search" class="input-icon"></i>
+              <input type="text" id="dbSearchInput" placeholder="Search item, category, remarks..." autocomplete="off">
+            </div>
+            <div class="filter-group">
+              <select id="dbCategoryFilter" class="glass-select" title="Filter by Category">
+                <option value="">All Categories</option>
+              </select>
+              <select id="dbStatusFilter" class="glass-select" title="Filter by Status">
+                <option value="">All Statuses</option>
+                <option value="in_stock">In Stock Only</option>
+                <option value="out_of_stock">Out of Stock Only</option>
+                <option value="low_stock">Low Stock (1-5 units)</option>
+              </select>
+              <button type="button" id="dbResetFiltersBtn" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-3" title="Reset Filters">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 inline mr-1"></i> Reset
+              </button>
+            </div>
           </div>
         </div>
+
         <div id="inventoryContainer" class="inventory-grid">
           <div class="loading-spinner"><i data-lucide="loader-2" class="w-5 h-5 animate-spin inline mr-1"></i> Loading inventory...</div>
         </div>
@@ -512,6 +539,30 @@
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Universal Action Confirmation Modal -->
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-backdrop glass-backdrop"></div>
+    <div class="modal-content modal-sm glass-modal">
+      <div class="modal-header">
+        <div class="flex items-center gap-2">
+          <div id="confirmIconWrap" class="w-8 h-8 rounded-full flex items-center justify-center text-amber-600 bg-amber-50 border border-amber-200">
+            <i id="confirmIcon" data-lucide="alert-triangle" class="w-4 h-4"></i>
+          </div>
+          <h3 id="confirmTitle" class="font-bold text-[#003865] text-base">Confirm Action</h3>
+        </div>
+        <button class="modal-close" id="closeConfirmModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirmMessage" class="text-sm text-slate-700 mb-2">Please confirm this action to proceed.</p>
+        <div id="confirmDetailsBox" class="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 text-xs text-slate-600 hidden mb-3"></div>
+        <div class="modal-actions flex justify-end gap-2 mt-4">
+          <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-3.5" id="cancelConfirmBtn">Cancel</button>
+          <button type="button" class="btn btn-primary glass-btn text-xs py-2 px-4" id="acceptConfirmBtn">Confirm & Proceed</button>
         </div>
       </div>
     </div>
