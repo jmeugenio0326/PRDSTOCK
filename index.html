@@ -273,24 +273,33 @@
             </div>
           </div>
 
-          <!-- Section Toolbar with aligned filters -->
-          <div class="section-toolbar glass-toolbar mt-3 pt-3 border-t border-slate-200/60">
-            <div class="search-box">
-              <i data-lucide="search" class="input-icon"></i>
-              <input type="text" id="dbSearchInput" placeholder="Search item, category, remarks..." autocomplete="off">
+          <!-- Section Toolbar with aligned unified filters -->
+          <div class="section-toolbar glass-toolbar mt-3 pt-3 border-t border-slate-200/60 flex flex-wrap items-center gap-3">
+            <div class="search-input-unified">
+              <span class="search-icon-embedded">
+                <i data-lucide="search" class="w-4 h-4"></i>
+              </span>
+              <input type="text" id="dbSearchInput" class="unified-search-field" placeholder="Search item, category, or remarks..." autocomplete="off">
             </div>
-            <div class="filter-group">
-              <select id="dbCategoryFilter" class="glass-select" title="Filter by Category">
-                <option value="">All Categories</option>
-              </select>
-              <select id="dbStatusFilter" class="glass-select" title="Filter by Status">
-                <option value="">All Statuses</option>
-                <option value="in_stock">In Stock Only</option>
-                <option value="out_of_stock">Out of Stock Only</option>
-                <option value="low_stock">Low Stock (1-5 units)</option>
-              </select>
-              <button type="button" id="dbResetFiltersBtn" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-3" title="Reset Filters">
-                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 inline mr-1"></i> Reset
+            <div class="filter-controls-group">
+              <div class="filter-select-wrapper">
+                <select id="dbCategoryFilter" class="unified-filter-select" title="Filter by Category">
+                  <option value="">All Categories</option>
+                </select>
+                <i data-lucide="chevron-down" class="filter-select-chevron"></i>
+              </div>
+              <div class="filter-select-wrapper">
+                <select id="dbStatusFilter" class="unified-filter-select" title="Filter by Status">
+                  <option value="">All Statuses</option>
+                  <option value="in_stock">In Stock Only</option>
+                  <option value="out_of_stock">Out of Stock Only</option>
+                  <option value="low_stock">Low Stock (1-5 units)</option>
+                </select>
+                <i data-lucide="chevron-down" class="filter-select-chevron"></i>
+              </div>
+              <button type="button" id="dbResetFiltersBtn" class="unified-filter-btn-round" title="Reset Filters">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span>Reset</span>
               </button>
             </div>
           </div>
@@ -320,18 +329,9 @@
                 </select>
               </div>
               <div class="form-group">
-                <label for="stockUnit">Unit of Measure</label>
+                <label for="stockUnit">Unit</label>
                 <select id="stockUnit" required class="glass-select">
-                  <option value="pcs">Pieces (pcs)</option>
-                  <option value="boxes">Boxes</option>
-                  <option value="reams">Reams</option>
-                  <option value="sets">Sets</option>
-                  <option value="rolls">Rolls</option>
-                  <option value="packs">Packs</option>
-                  <option value="units">Units</option>
-                  <option value="meters">Meters</option>
-                  <option value="bottles">Bottles</option>
-                  <option value="pairs">Pairs</option>
+                  <option value="">Select Unit</option>
                 </select>
               </div>
             </div>
@@ -349,10 +349,10 @@
               </div>
             </div>
             <div class="form-group">
-              <label for="stockRemarks">Remarks / Purpose / Reference</label>
-              <input type="text" id="stockRemarks" placeholder="e.g., PO #1024 or Issued to Engineering Section" maxlength="200">
+              <label for="stockRemarks">Remarks / Purpose / Reference (Optional)</label>
+              <input type="text" id="stockRemarks" placeholder="Optional: e.g., PO #1024 or Issued to Engineering Section" maxlength="200">
             </div>
-            <button type="submit" class="btn btn-primary btn-block glass-btn"><i data-lucide="save" class="w-4 h-4"></i> Record Secured Transaction</button>
+            <button type="submit" class="btn btn-primary btn-block glass-btn"><i data-lucide="check-circle" class="w-4 h-4"></i> Record Stock</button>
           </form>
         </div>
       </section>
@@ -384,19 +384,59 @@
         </div>
       </section>
 
-      <!-- TAB 4: Category Management -->
+      <!-- TAB 4: Category & Unit Management -->
       <section id="tabCategories" class="tab-section">
-        <div class="card glass-panel">
-          <div class="card-header-flex">
-            <h2><i data-lucide="folder-tree" class="w-5 h-5 inline mr-1"></i> Category Management</h2>
-            <span class="badge-count glass-pill" id="categoryTotalBadge">0</span>
+        <!-- Classification & Unit Header & Switcher -->
+        <div class="card glass-panel mb-4 p-3 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-blue-900/10 flex items-center justify-center text-[#003865]">
+              <i data-lucide="sliders" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h2 class="text-base font-bold text-[#003865] m-0">Classification & Unit Settings</h2>
+              <p class="subtitle text-xs text-slate-500 m-0">Manage property item classifications and units of measure</p>
+            </div>
           </div>
-          <p class="subtitle">Right-click or long-press on any category chip to <strong>Rename</strong> or <strong>Remove</strong> it.</p>
-          <form id="categoryForm" class="inline-form" autocomplete="off">
-            <input type="text" id="newCategoryInput" placeholder="Enter new category name..." required maxlength="50">
-            <button type="submit" class="btn btn-primary glass-btn"><i data-lucide="plus" class="w-4 h-4"></i> Add Category</button>
-          </form>
-          <div id="categoriesList" class="category-chips-list"></div>
+          <div class="glass-segmented flex rounded-full p-1 bg-slate-200/60 border border-slate-300/60">
+            <button type="button" id="tabSubBtnCategories" class="subtab-btn active px-3.5 py-1.5 rounded-full text-xs font-bold transition-all" data-subtab="categories">
+              <i data-lucide="folder-tree" class="w-3.5 h-3.5 inline mr-1"></i> Categories (<span id="categoryCountSubtab">0</span>)
+            </button>
+            <button type="button" id="tabSubBtnUnits" class="subtab-btn px-3.5 py-1.5 rounded-full text-xs font-bold transition-all text-slate-600" data-subtab="units">
+              <i data-lucide="scale" class="w-3.5 h-3.5 inline mr-1"></i> Units (<span id="unitCountSubtab">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Subpanel 1: Category Management -->
+        <div id="subpanelCategories" class="subtab-content">
+          <div class="card glass-panel">
+            <div class="card-header-flex mb-2">
+              <h2><i data-lucide="folder-tree" class="w-5 h-5 inline mr-1"></i> Category Management</h2>
+              <span class="badge-count glass-pill" id="categoryTotalBadge">0 Total</span>
+            </div>
+            <p class="subtitle">Click the 3-dots button on any category chip to <strong>Rename</strong> or <strong>Remove</strong> it.</p>
+            <form id="categoryForm" class="inline-form" autocomplete="off">
+              <input type="text" id="newCategoryInput" placeholder="Enter new category name..." required maxlength="50" class="glass-input">
+              <button type="submit" class="btn btn-primary glass-btn"><i data-lucide="plus" class="w-4 h-4"></i> Add Category</button>
+            </form>
+            <div id="categoriesList" class="category-chips-list mt-4"></div>
+          </div>
+        </div>
+
+        <!-- Subpanel 2: Unit Management -->
+        <div id="subpanelUnits" class="subtab-content hidden">
+          <div class="card glass-panel">
+            <div class="card-header-flex mb-2">
+              <h2><i data-lucide="scale" class="w-5 h-5 inline mr-1"></i> Unit Management</h2>
+              <span class="badge-count glass-pill" id="unitTotalBadge">0 Total</span>
+            </div>
+            <p class="subtitle">Manage units of measure used across the Fill-Up form and database. Click 3-dots to <strong>Rename</strong> or <strong>Remove</strong>.</p>
+            <form id="unitForm" class="inline-form" autocomplete="off">
+              <input type="text" id="newUnitInput" placeholder="Enter new unit (e.g. rolls, packs, meters)..." required maxlength="30" class="glass-input">
+              <button type="submit" class="btn btn-primary glass-btn"><i data-lucide="plus" class="w-4 h-4"></i> Add Unit</button>
+            </form>
+            <div id="unitsList" class="category-chips-list mt-4"></div>
+          </div>
         </div>
       </section>
 
@@ -422,7 +462,7 @@
       </button>
       <button class="dock-btn" data-target="tabCategories">
         <i data-lucide="tags"></i>
-        <span>Categories</span>
+        <span>Categories & Units</span>
       </button>
     </nav>
   </div>
@@ -438,6 +478,13 @@
     <div class="context-menu-title" id="ctxCategoryTitle">Category Actions</div>
     <button id="ctxRenameCategory"><i data-lucide="edit-2" class="w-4 h-4"></i> Rename Category</button>
     <button id="ctxRemoveCategory" class="menu-danger"><i data-lucide="trash-2" class="w-4 h-4"></i> Remove Category</button>
+  </div>
+
+  <!-- Custom Unit Context Menu -->
+  <div id="unitContextMenu" class="context-menu glass-context-menu hidden">
+    <div class="context-menu-title" id="ctxUnitTitle">Unit Actions</div>
+    <button id="ctxRenameUnit"><i data-lucide="edit-2" class="w-4 h-4"></i> Rename Unit</button>
+    <button id="ctxRemoveUnit" class="menu-danger"><i data-lucide="trash-2" class="w-4 h-4"></i> Remove Unit</button>
   </div>
 
   <!-- Item History Modal -->
@@ -468,6 +515,29 @@
           </div>
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary glass-btn-secondary" id="cancelRenameBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary glass-btn"><i data-lucide="check" class="w-4 h-4"></i> Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rename Unit Modal -->
+  <div id="renameUnitModal" class="modal hidden">
+    <div class="modal-backdrop glass-backdrop"></div>
+    <div class="modal-content modal-sm glass-modal">
+      <div class="modal-header">
+        <h3>Rename Unit</h3>
+        <button class="modal-close" id="closeRenameUnitModalBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="renameUnitForm" autocomplete="off">
+          <div class="form-group">
+            <label for="renameUnitInput">New Unit Name</label>
+            <input type="text" id="renameUnitInput" required autocomplete="off" maxlength="30" class="glass-input">
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary glass-btn-secondary" id="cancelRenameUnitBtn">Cancel</button>
             <button type="submit" class="btn btn-primary glass-btn"><i data-lucide="check" class="w-4 h-4"></i> Save Changes</button>
           </div>
         </form>
@@ -510,35 +580,48 @@
           </div>
         </div>
 
-        <!-- Change Passcode Form -->
-        <div class="change-passcode-box border border-slate-200/80 bg-white/60 p-4 rounded-xl">
-          <div class="flex items-center gap-2 mb-3">
-            <i data-lucide="key-round" class="w-4 h-4 text-[#003865]"></i>
-            <h4 class="font-bold text-slate-900 text-sm">Change 4-Digit Passcode</h4>
-          </div>
-          <p class="text-xs text-slate-500 mb-3">Enter your current passcode and your new 4-digit passcode once.</p>
+        <!-- Collapsible Change Passcode Box -->
+        <div class="passcode-accordion rounded-xl border border-slate-200/80 bg-white/70 overflow-hidden shadow-sm">
+          <button type="button" id="togglePasscodeAccordionBtn" class="w-full flex items-center justify-between p-3.5 text-left bg-white/50 hover:bg-slate-50/80 transition-colors cursor-pointer border-none">
+            <div class="flex items-center gap-2.5">
+              <div class="w-7 h-7 rounded-lg bg-blue-900/10 text-[#003865] flex items-center justify-center">
+                <i data-lucide="key-round" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h4 class="font-bold text-slate-900 text-xs leading-snug">Change 4-Digit Passcode</h4>
+                <p class="text-[11px] text-slate-500 m-0">Click to expand security credential update</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 text-xs text-[#003865] font-semibold">
+              <span id="passcodeToggleLabel">Expand</span>
+              <i id="passcodeAccordionChevron" data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform duration-200"></i>
+            </div>
+          </button>
           
-          <form id="changePasscodeForm" autocomplete="off">
-            <div id="changePasscodeError" class="alert error hidden py-2 px-3 text-xs mb-3"></div>
-            
-            <div class="form-group mb-3">
-              <label for="oldPasscode" class="text-xs font-semibold text-slate-700 block mb-1">Current Passcode (4 Digits)</label>
-              <input type="password" id="oldPasscode" pattern="[0-9]*" inputmode="numeric" maxlength="4" placeholder="Enter current 4-digit passcode" required class="glass-input text-sm py-2 px-3 tracking-widest font-mono text-center" autocomplete="current-password">
-            </div>
+          <div id="passcodeAccordionBody" class="hidden p-4 pt-2 border-t border-slate-200/70">
+            <p class="text-xs text-slate-500 mb-3">Enter your current passcode and your new 4-digit passcode once.</p>
+            <form id="changePasscodeForm" autocomplete="off">
+              <div id="changePasscodeError" class="alert error hidden py-2 px-3 text-xs mb-3"></div>
+              
+              <div class="form-group mb-3">
+                <label for="oldPasscode" class="text-xs font-semibold text-slate-700 block mb-1">Current Passcode (4 Digits)</label>
+                <input type="password" id="oldPasscode" pattern="[0-9]*" inputmode="numeric" maxlength="4" placeholder="Enter current 4-digit passcode" required class="glass-input text-sm py-2 px-3 tracking-widest font-mono text-center" autocomplete="current-password">
+              </div>
 
-            <div class="form-group mb-4">
-              <label for="newPasscode" class="text-xs font-semibold text-slate-700 block mb-1">New Passcode (4 Digits)</label>
-              <input type="password" id="newPasscode" pattern="[0-9]*" inputmode="numeric" maxlength="4" placeholder="Enter new 4-digit passcode" required class="glass-input text-sm py-2 px-3 tracking-widest font-mono text-center" autocomplete="new-password">
-              <small class="text-[11px] text-slate-400 mt-1 block">Must be exactly 4 numeric digits (e.g. 1234).</small>
-            </div>
+              <div class="form-group mb-4">
+                <label for="newPasscode" class="text-xs font-semibold text-slate-700 block mb-1">New Passcode (4 Digits)</label>
+                <input type="password" id="newPasscode" pattern="[0-9]*" inputmode="numeric" maxlength="4" placeholder="Enter new 4-digit passcode" required class="glass-input text-sm py-2 px-3 tracking-widest font-mono text-center" autocomplete="new-password">
+                <small class="text-[11px] text-slate-400 mt-1 block">Must be exactly 4 numeric digits (e.g. 1234).</small>
+              </div>
 
-            <div class="modal-actions mt-3 flex justify-end gap-2">
-              <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-3.5" id="cancelProfileModalBtn">Cancel</button>
-              <button type="submit" class="btn btn-primary glass-btn text-xs py-2 px-4" id="savePasscodeBtn">
-                <i data-lucide="check" class="w-3.5 h-3.5 inline mr-1"></i> Update Passcode
-              </button>
-            </div>
-          </form>
+              <div class="modal-actions mt-3 flex justify-end gap-2">
+                <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-3.5 rounded-full" id="cancelProfileModalBtn">Cancel</button>
+                <button type="submit" class="btn btn-primary glass-btn text-xs py-2 px-4 rounded-full" id="savePasscodeBtn">
+                  <i data-lucide="check" class="w-3.5 h-3.5 inline mr-1"></i> Update Passcode
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>
@@ -561,8 +644,8 @@
         <p id="confirmMessage" class="text-sm text-slate-700 mb-2">Please confirm this action to proceed.</p>
         <div id="confirmDetailsBox" class="p-3 rounded-xl bg-slate-50/80 border border-slate-200/80 text-xs text-slate-600 hidden mb-3"></div>
         <div class="modal-actions flex justify-end gap-2 mt-4">
-          <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-3.5" id="cancelConfirmBtn">Cancel</button>
-          <button type="button" class="btn btn-primary glass-btn text-xs py-2 px-4" id="acceptConfirmBtn">Confirm & Proceed</button>
+          <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-2 px-4 rounded-full" id="cancelConfirmBtn">Cancel</button>
+          <button type="button" class="btn btn-primary glass-btn text-xs py-2 px-4 rounded-full" id="acceptConfirmBtn">Confirm & Proceed</button>
         </div>
       </div>
     </div>

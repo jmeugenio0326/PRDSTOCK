@@ -1011,34 +1011,132 @@ html, body {
 .section-toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem;
   margin-bottom: 1.1rem;
   width: 100%;
 }
-.search-box {
-  flex: 1 1 220px;
-  min-width: 0;
+.search-input-unified {
   position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 280px;
+  min-width: min(100%, 240px);
 }
-.search-box i {
+.search-icon-embedded {
   position: absolute;
-  left: 0.95rem;
+  left: 1rem;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-muted);
-}
-.search-box input {
-  padding-left: 2.45rem;
-}
-.filter-group {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  flex: 1 1 260px;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  pointer-events: none;
+  z-index: 2;
 }
-.filter-group select {
-  flex: 1 1 120px;
-  min-width: 0;
+.search-icon-embedded svg,
+.search-icon-embedded [data-lucide] {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.unified-search-field {
+  width: 100%;
+  height: 42px;
+  border-radius: 9999px !important;
+  padding-left: 2.75rem !important;
+  padding-right: 1.25rem !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(203, 213, 225, 0.9) !important;
+  font-size: 0.85rem;
+  color: var(--text-main);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+.unified-search-field:focus {
+  border-color: #003865 !important;
+  box-shadow: 0 0 0 3px rgba(0, 56, 101, 0.12) !important;
+  background: #ffffff !important;
+  outline: none;
+}
+.filter-controls-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex: 1 1 320px;
+}
+.filter-select-wrapper {
+  position: relative;
+  flex: 1 1 140px;
+  min-width: 125px;
+  display: flex;
+  align-items: center;
+}
+.unified-filter-select {
+  width: 100%;
+  height: 42px;
+  border-radius: 9999px !important;
+  padding: 0 2.2rem 0 1.15rem !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(203, 213, 225, 0.9) !important;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #1e293b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+.unified-filter-select:hover {
+  border-color: #94a3b8 !important;
+  background: #ffffff !important;
+}
+.unified-filter-select:focus {
+  border-color: #003865 !important;
+  box-shadow: 0 0 0 3px rgba(0, 56, 101, 0.12) !important;
+  outline: none;
+}
+.filter-select-chevron {
+  position: absolute;
+  right: 0.85rem;
+  pointer-events: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  color: #64748b;
+}
+.unified-filter-btn-round {
+  height: 42px;
+  border-radius: 9999px !important;
+  padding: 0 1.25rem !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(203, 213, 225, 0.9) !important;
+  color: #334155 !important;
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.unified-filter-btn-round:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+}
+.unified-filter-btn-round:active {
+  transform: translateY(0);
 }
 
 .category-group-header {
@@ -1553,3 +1651,45 @@ html, body {
   .pin-box { width: 44px; height: 52px; font-size: 1.45rem; }
   .quick-actions-bar { grid-template-columns: 1fr 1fr; }
 }
+
+/* ====================================================
+   15. SUBTABS, PASSCODE ACCORDION & CONFIRM STYLES
+   ==================================================== */
+.subtab-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-flex;
+  align-items: center;
+}
+.subtab-btn:hover {
+  color: #003865;
+}
+.subtab-btn.active {
+  background: #ffffff;
+  color: #003865;
+  box-shadow: 0 2px 8px rgba(0, 56, 101, 0.15);
+}
+
+.passcode-accordion {
+  transition: all 0.2s ease-in-out;
+}
+
+#confirmIconWrap.danger {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #dc2626 !important;
+}
+#confirmIconWrap.warning {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #d97706 !important;
+}
+#confirmIconWrap.info {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #0284c7 !important;
+}
+

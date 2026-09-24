@@ -17,9 +17,11 @@ const db = firebase.database();
 // State Cache
 let inventoryData = {};
 let categoriesData = [];
+let unitsData = [];
 let logsData = [];
 let activeContextItem = null;
 let activeContextCategory = null;
+let activeContextUnit = null;
 let currentGraphMode = 'movement'; // 'movement' or 'levels'
 let liveStockChart = null;
 
@@ -51,6 +53,10 @@ const changePasscodeForm = document.getElementById('changePasscodeForm');
 const changePasscodeError = document.getElementById('changePasscodeError');
 const oldPasscodeInput = document.getElementById('oldPasscode');
 const newPasscodeInput = document.getElementById('newPasscode');
+const togglePasscodeAccordionBtn = document.getElementById('togglePasscodeAccordionBtn');
+const passcodeAccordionBody = document.getElementById('passcodeAccordionBody');
+const passcodeAccordionChevron = document.getElementById('passcodeAccordionChevron');
+const passcodeToggleLabel = document.getElementById('passcodeToggleLabel');
 
 // DOM Elements - Confirmation Modal
 const confirmModal = document.getElementById('confirmModal');
@@ -65,9 +71,11 @@ let onConfirmCallback = null;
 // App DOM Elements - Tabs & Forms
 const stockForm = document.getElementById('stockForm');
 const categoryForm = document.getElementById('categoryForm');
+const unitForm = document.getElementById('unitForm');
 const inventoryContainer = document.getElementById('inventoryContainer');
 const itemHistoryList = document.getElementById('itemHistoryList');
 const stockCategorySelect = document.getElementById('stockCategory');
+const stockUnitSelect = document.getElementById('stockUnit');
 const dbCategoryFilter = document.getElementById('dbCategoryFilter');
 const dbSearchInput = document.getElementById('dbSearchInput');
 const dbStatusFilter = document.getElementById('dbStatusFilter');
@@ -75,6 +83,7 @@ const dbResetFiltersBtn = document.getElementById('dbResetFiltersBtn');
 const dbItemsSummaryBadge = document.getElementById('dbItemsSummaryBadge');
 const itemContextMenu = document.getElementById('itemContextMenu');
 const categoryContextMenu = document.getElementById('categoryContextMenu');
+const unitContextMenu = document.getElementById('unitContextMenu');
 const historyModal = document.getElementById('historyModal');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const renameCategoryModal = document.getElementById('renameCategoryModal');
@@ -82,8 +91,21 @@ const renameCategoryForm = document.getElementById('renameCategoryForm');
 const renameCategoryInput = document.getElementById('renameCategoryInput');
 const closeRenameModalBtn = document.getElementById('closeRenameModalBtn');
 const cancelRenameBtn = document.getElementById('cancelRenameBtn');
+const renameUnitModal = document.getElementById('renameUnitModal');
+const renameUnitForm = document.getElementById('renameUnitForm');
+const renameUnitInput = document.getElementById('renameUnitInput');
+const closeRenameUnitModalBtn = document.getElementById('closeRenameUnitModalBtn');
+const cancelRenameUnitBtn = document.getElementById('cancelRenameUnitBtn');
 const logsTableBody = document.getElementById('logsTableBody');
 const logSearchInput = document.getElementById('logSearchInput');
+
+// Subtabs - Categories vs Units
+const tabSubBtnCategories = document.getElementById('tabSubBtnCategories');
+const tabSubBtnUnits = document.getElementById('tabSubBtnUnits');
+const subpanelCategories = document.getElementById('subpanelCategories');
+const subpanelUnits = document.getElementById('subpanelUnits');
+const categoryCountSubtab = document.getElementById('categoryCountSubtab');
+const unitCountSubtab = document.getElementById('unitCountSubtab');
 
 // ==========================================
 // 0. LUCIDE SVG ICONS REFRESH HELPER
@@ -166,9 +188,32 @@ function showToast(message, type = 'success', title = 'System Updated') {
 // ==========================================
 // 0.3 UNIVERSAL CONFIRMATION MODAL HELPER
 // ==========================================
-function openConfirmDialog({ title, message, detailsHtml = '', confirmText = 'Confirm & Proceed', confirmBtnClass = 'btn-primary', onConfirm }) {
+function openConfirmDialog({ 
+  title, 
+  message, 
+  detailsHtml = '', 
+  confirmText = 'Confirm & Proceed', 
+  cancelText = 'Cancel', 
+  confirmBtnClass = 'btn-primary', 
+  iconTheme = 'warning', 
+  onConfirm 
+}) {
   confirmTitleEl.textContent = title || 'Confirm Action';
   confirmMessageEl.textContent = message || 'Please confirm this action to proceed:';
+
+  const iconWrap = document.getElementById('confirmIconWrap');
+  const confirmIcon = document.getElementById('confirmIcon');
+
+  if (iconTheme === 'danger') {
+    iconWrap.className = 'w-8 h-8 rounded-full flex items-center justify-center danger';
+    confirmIcon.setAttribute('data-lucide', 'alert-triangle');
+  } else if (iconTheme === 'info') {
+    iconWrap.className = 'w-8 h-8 rounded-full flex items-center justify-center info';
+    confirmIcon.setAttribute('data-lucide', 'info');
+  } else {
+    iconWrap.className = 'w-8 h-8 rounded-full flex items-center justify-center text-amber-600 bg-amber-50 border border-amber-200';
+    confirmIcon.setAttribute('data-lucide', 'alert-triangle');
+  }
 
   if (detailsHtml) {
     confirmDetailsBox.innerHTML = detailsHtml;
@@ -178,8 +223,9 @@ function openConfirmDialog({ title, message, detailsHtml = '', confirmText = 'Co
     confirmDetailsBox.classList.add('hidden');
   }
 
+  cancelConfirmBtn.textContent = cancelText;
   acceptConfirmBtn.textContent = confirmText;
-  acceptConfirmBtn.className = `btn glass-btn text-xs py-2 px-4 ${confirmBtnClass}`;
+  acceptConfirmBtn.className = `btn glass-btn text-xs py-2 px-4 rounded-full ${confirmBtnClass}`;
 
   onConfirmCallback = onConfirm;
   confirmModal.classList.remove('hidden');
@@ -213,6 +259,8 @@ function refreshAllViews() {
   updateDashboard();
   renderInventory();
   renderCategoriesList();
+  renderUnitsList();
+  refreshUnitSelects();
   updateHistoryDatalist();
   renderLogs(logsData);
   if (liveStockChart) liveStockChart.resize();
@@ -231,7 +279,7 @@ function refreshCategorySelects() {
 }
 
 // ==========================================
-// 1. PRE-SEED DEFAULT ADMIN AND CATEGORIES
+// 1. PRE-SEED DEFAULT ADMIN, CATEGORIES & UNITS
 // ==========================================
 async function ensureInitialSeed() {
   const defaultHash = await computeSecureHash('1234');
@@ -259,6 +307,13 @@ async function ensureInitialSeed() {
     if (!snap.exists()) {
       const initialCats = ["Office Supplies", "IT Equipment", "Hardware & Tools", "Janitorial Supplies"];
       initialCats.forEach(cat => db.ref('categories').push(cat));
+    }
+  });
+
+  db.ref('units').once('value', (snap) => {
+    if (!snap.exists()) {
+      const initialUnits = ["pcs", "boxes", "reams", "sets", "rolls", "packs", "units", "meters", "bottles", "pairs"];
+      initialUnits.forEach(u => db.ref('units').push(u));
     }
   });
 }
@@ -423,13 +478,16 @@ loginForm.addEventListener('submit', (e) => {
   attemptLogin();
 });
 
-// Logout with Confirmation
+// Logout with Simple Confirmation & Red Warning Icon
 logoutBtn.addEventListener('click', () => {
   openConfirmDialog({
-    title: 'Sign Out Confirmation',
-    message: 'Are you sure you want to sign out of the Administrator account?',
-    confirmText: 'Yes, Sign Out',
-    confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700',
+    title: 'Sign Out',
+    message: 'Are you sure you want to sign out?',
+    detailsHtml: '',
+    confirmText: 'Sign Out',
+    cancelText: 'Cancel',
+    iconTheme: 'danger',
+    confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700 shadow-sm',
     onConfirm: () => {
       localStorage.removeItem('nia_session');
       location.reload();
@@ -476,13 +534,39 @@ function showApp() {
 profileBtn.addEventListener('click', () => {
   changePasscodeError.classList.add('hidden');
   changePasscodeForm.reset();
+  if (passcodeAccordionBody) {
+    passcodeAccordionBody.classList.add('hidden');
+    if (passcodeAccordionChevron) passcodeAccordionChevron.style.transform = 'rotate(0deg)';
+    if (passcodeToggleLabel) passcodeToggleLabel.textContent = 'Expand';
+  }
   profileModal.classList.remove('hidden');
   refreshIcons();
-  setTimeout(() => oldPasscodeInput.focus(), 150);
 });
+
+if (togglePasscodeAccordionBtn) {
+  togglePasscodeAccordionBtn.addEventListener('click', () => {
+    const isHidden = passcodeAccordionBody.classList.contains('hidden');
+    if (isHidden) {
+      passcodeAccordionBody.classList.remove('hidden');
+      if (passcodeAccordionChevron) passcodeAccordionChevron.style.transform = 'rotate(180deg)';
+      if (passcodeToggleLabel) passcodeToggleLabel.textContent = 'Minimize';
+      setTimeout(() => oldPasscodeInput.focus(), 120);
+    } else {
+      passcodeAccordionBody.classList.add('hidden');
+      if (passcodeAccordionChevron) passcodeAccordionChevron.style.transform = 'rotate(0deg)';
+      if (passcodeToggleLabel) passcodeToggleLabel.textContent = 'Expand';
+    }
+    refreshIcons();
+  });
+}
 
 function closeProfileModal() {
   profileModal.classList.add('hidden');
+  if (passcodeAccordionBody) {
+    passcodeAccordionBody.classList.add('hidden');
+    if (passcodeAccordionChevron) passcodeAccordionChevron.style.transform = 'rotate(0deg)';
+    if (passcodeToggleLabel) passcodeToggleLabel.textContent = 'Expand';
+  }
 }
 
 closeProfileModalBtn.addEventListener('click', closeProfileModal);
@@ -614,6 +698,16 @@ function initDataListeners() {
     renderInventory();
   });
 
+  db.ref('units').on('value', (snap) => {
+    unitsData = [];
+    snap.forEach(child => {
+      unitsData.push({ key: child.key, name: String(child.val() || '') });
+    });
+    refreshUnitSelects();
+    renderUnitsList();
+    refreshIcons();
+  });
+
   db.ref('inventory').on('value', (snap) => {
     inventoryData = snap.val() || {};
     refreshAllViews();
@@ -643,6 +737,8 @@ function renderCategoriesList() {
 
   const totalEl = document.getElementById('categoryTotalBadge');
   if (totalEl) totalEl.textContent = `${categoriesData.length} Total`;
+  const subtabBadge = document.getElementById('categoryCountSubtab');
+  if (subtabBadge) subtabBadge.textContent = categoriesData.length;
 
   categoriesData.forEach(cat => {
     const count = getCategoryItemCount(cat.name);
@@ -806,6 +902,261 @@ categoryForm.addEventListener('submit', (e) => {
     showToast(`Category "${cat}" added successfully`, 'success', 'Category Created');
   }
 });
+
+// ==========================================
+// 6.1 SUBTAB SWITCHER (CATEGORIES vs UNITS)
+// ==========================================
+if (tabSubBtnCategories && tabSubBtnUnits) {
+  tabSubBtnCategories.addEventListener('click', () => {
+    tabSubBtnCategories.classList.add('active');
+    tabSubBtnCategories.classList.remove('text-slate-600');
+    tabSubBtnUnits.classList.remove('active');
+    tabSubBtnUnits.classList.add('text-slate-600');
+    if (subpanelCategories) subpanelCategories.classList.remove('hidden');
+    if (subpanelUnits) subpanelUnits.classList.add('hidden');
+    refreshIcons();
+  });
+
+  tabSubBtnUnits.addEventListener('click', () => {
+    tabSubBtnUnits.classList.add('active');
+    tabSubBtnUnits.classList.remove('text-slate-600');
+    tabSubBtnCategories.classList.remove('active');
+    tabSubBtnCategories.classList.add('text-slate-600');
+    if (subpanelUnits) subpanelUnits.classList.remove('hidden');
+    if (subpanelCategories) subpanelCategories.classList.add('hidden');
+    refreshIcons();
+  });
+}
+
+// ==========================================
+// 6.2 UNIT MANAGEMENT (VIEW, ADD, RENAME, REMOVE)
+// ==========================================
+function getUnitItemCount(unitName) {
+  return Object.values(inventoryData).filter(item => item.unit === unitName).length;
+}
+
+function refreshUnitSelects() {
+  const stockUnitSelect = document.getElementById('stockUnit');
+  if (!stockUnitSelect) return;
+  const currentVal = stockUnitSelect.value;
+  stockUnitSelect.innerHTML = '<option value="">Select Unit</option>';
+
+  unitsData.forEach(u => {
+    const escaped = escapeHtml(u.name);
+    stockUnitSelect.insertAdjacentHTML('beforeend', `<option value="${escaped}">${escaped}</option>`);
+  });
+
+  if (currentVal && unitsData.some(u => u.name === currentVal)) {
+    stockUnitSelect.value = currentVal;
+  } else if (unitsData.some(u => u.name === 'pcs')) {
+    stockUnitSelect.value = 'pcs';
+  }
+}
+
+function renderUnitsList() {
+  const listEl = document.getElementById('unitsList');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+
+  const totalEl = document.getElementById('unitTotalBadge');
+  if (totalEl) totalEl.textContent = `${unitsData.length} Total`;
+  const subtabBadge = document.getElementById('unitCountSubtab');
+  if (subtabBadge) subtabBadge.textContent = unitsData.length;
+
+  unitsData.forEach(unit => {
+    const count = getUnitItemCount(unit.name);
+    const chip = document.createElement('div');
+    chip.className = 'category-chip glass-subpanel flex items-center justify-between gap-2.5';
+    chip.dataset.key = unit.key;
+    chip.dataset.name = unit.name;
+    chip.innerHTML = `
+      <div class="flex items-center gap-2 min-w-0">
+        <i data-lucide="scale" class="w-4 h-4 text-[#0f766e] flex-shrink-0"></i>
+        <span class="category-chip-name font-semibold text-slate-800 truncate">${escapeHtml(unit.name)}</span>
+      </div>
+      <div class="flex items-center gap-1.5 flex-shrink-0">
+        <span class="category-count-badge" title="${count} item(s) using this unit">${count}</span>
+        <button type="button" class="btn-category-options btn-unit-options" data-key="${unit.key}" data-name="${escapeHtml(unit.name)}" title="Unit Options">
+          <i data-lucide="more-vertical" class="w-4 h-4 text-slate-600"></i>
+        </button>
+      </div>
+    `;
+
+    chip.querySelector('.btn-unit-options').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      openUnitContextMenu(rect.left - 130, rect.bottom + window.scrollY + 6, unit.key, unit.name);
+    });
+
+    listEl.appendChild(chip);
+  });
+
+  refreshIcons();
+}
+
+function openUnitContextMenu(x, y, key, name) {
+  activeContextUnit = { key, name };
+  const titleEl = document.getElementById('ctxUnitTitle');
+  if (titleEl) titleEl.textContent = `Unit: ${name}`;
+  if (unitContextMenu) {
+    unitContextMenu.style.left = `${Math.max(10, Math.min(x, window.innerWidth - 230))}px`;
+    unitContextMenu.style.top = `${y}px`;
+    unitContextMenu.classList.remove('hidden');
+  }
+  refreshIcons();
+}
+
+// Add Unit Form Submit
+if (unitForm) {
+  unitForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('newUnitInput');
+    const unitName = input.value.trim().toLowerCase().slice(0, 30);
+    if (!unitName) return;
+
+    if (unitsData.some(u => u.name.toLowerCase() === unitName)) {
+      showToast(`Unit "${unitName}" already exists!`, 'warning', 'Duplicate Unit');
+      return;
+    }
+
+    const newRef = db.ref('units').push(unitName);
+    unitsData.push({ key: newRef.key, name: unitName });
+    input.value = '';
+    refreshUnitSelects();
+    renderUnitsList();
+    showToast(`Unit "${unitName}" added successfully`, 'success', 'Unit Created');
+  });
+}
+
+// Rename Unit Modal actions
+const ctxRenameUnitBtn = document.getElementById('ctxRenameUnit');
+if (ctxRenameUnitBtn) {
+  ctxRenameUnitBtn.addEventListener('click', () => {
+    if (!activeContextUnit) return;
+    if (unitContextMenu) unitContextMenu.classList.add('hidden');
+    if (renameUnitInput) renameUnitInput.value = activeContextUnit.name;
+    if (renameUnitModal) renameUnitModal.classList.remove('hidden');
+    refreshIcons();
+    setTimeout(() => { if (renameUnitInput) renameUnitInput.focus(); }, 100);
+  });
+}
+
+if (closeRenameUnitModalBtn) {
+  closeRenameUnitModalBtn.addEventListener('click', () => {
+    if (renameUnitModal) renameUnitModal.classList.add('hidden');
+  });
+}
+if (cancelRenameUnitBtn) {
+  cancelRenameUnitBtn.addEventListener('click', () => {
+    if (renameUnitModal) renameUnitModal.classList.add('hidden');
+  });
+}
+const renameUnitBackdrop = document.querySelector('#renameUnitModal .modal-backdrop');
+if (renameUnitBackdrop) {
+  renameUnitBackdrop.addEventListener('click', () => {
+    if (renameUnitModal) renameUnitModal.classList.add('hidden');
+  });
+}
+
+if (renameUnitForm) {
+  renameUnitForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!activeContextUnit) return;
+
+    const newName = renameUnitInput.value.trim().toLowerCase().slice(0, 30);
+    const oldName = activeContextUnit.name;
+    const key = activeContextUnit.key;
+
+    if (!newName || newName === oldName) {
+      if (renameUnitModal) renameUnitModal.classList.add('hidden');
+      return;
+    }
+
+    const affectedCount = getUnitItemCount(oldName);
+
+    openConfirmDialog({
+      title: 'Confirm Unit Rename',
+      message: `Are you sure you want to rename unit "${oldName}" to "${newName}"?`,
+      detailsHtml: `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Current Unit:</span>
+          <span class="confirm-detail-value">${escapeHtml(oldName)}</span>
+        </div>
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">New Unit:</span>
+          <span class="confirm-detail-value font-semibold text-[#003865]">${escapeHtml(newName)}</span>
+        </div>
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Affected Items:</span>
+          <span class="confirm-detail-value">${affectedCount} item(s) will be updated</span>
+        </div>
+      `,
+      confirmText: 'Rename Unit',
+      confirmBtnClass: 'btn-primary',
+      onConfirm: () => {
+        db.ref(`units/${key}`).set(newName);
+
+        const updates = {};
+        Object.entries(inventoryData).forEach(([itemKey, item]) => {
+          if (item.unit === oldName) {
+            updates[`inventory/${itemKey}/unit`] = newName;
+            item.unit = newName;
+          }
+        });
+
+        if (Object.keys(updates).length > 0) {
+          db.ref().update(updates);
+        }
+
+        const found = unitsData.find(u => u.key === key);
+        if (found) found.name = newName;
+
+        if (renameUnitModal) renameUnitModal.classList.add('hidden');
+        refreshUnitSelects();
+        refreshAllViews();
+        showToast(`Unit renamed to "${newName}"`, 'info', 'Unit Updated');
+      }
+    });
+  });
+}
+
+// Remove Unit with Confirmation
+const ctxRemoveUnitBtn = document.getElementById('ctxRemoveUnit');
+if (ctxRemoveUnitBtn) {
+  ctxRemoveUnitBtn.addEventListener('click', () => {
+    if (!activeContextUnit) return;
+    if (unitContextMenu) unitContextMenu.classList.add('hidden');
+
+    const { key, name } = activeContextUnit;
+    const count = getUnitItemCount(name);
+
+    openConfirmDialog({
+      title: 'Confirm Unit Deletion',
+      message: `Are you sure you want to remove the unit "${name}"?`,
+      detailsHtml: `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Unit Name:</span>
+          <span class="confirm-detail-value">${escapeHtml(name)}</span>
+        </div>
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Registered Items:</span>
+          <span class="confirm-detail-value ${count > 0 ? 'text-red-600 font-bold' : ''}">${count} item(s)</span>
+        </div>
+        ${count > 0 ? '<p class="text-[11px] text-amber-700 mt-2"><strong>Notice:</strong> Existing items will keep their recorded unit until modified.</p>' : ''}
+      `,
+      confirmText: 'Delete Unit',
+      confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700',
+      onConfirm: () => {
+        db.ref(`units/${key}`).remove();
+        unitsData = unitsData.filter(u => u.key !== key);
+        refreshUnitSelects();
+        renderUnitsList();
+        refreshAllViews();
+        showToast(`Unit "${name}" removed`, 'warning', 'Unit Deleted');
+      }
+    });
+  });
+}
 
 // ==========================================
 // 7. HOMEPAGE DASHBOARD & ANIMATED CHART
@@ -1047,7 +1398,7 @@ stockForm.addEventListener('submit', (e) => {
 
   // Open Glass Confirmation Dialog before committing
   openConfirmDialog({
-    title: 'Confirm Stock Transaction',
+    title: 'Confirm Stock Movement',
     message: 'Please review and confirm this stock movement before recording:',
     detailsHtml: `
       <div class="confirm-detail-row">
@@ -1072,14 +1423,12 @@ stockForm.addEventListener('submit', (e) => {
         <span class="confirm-detail-label">Inventory Balance:</span>
         <span class="confirm-detail-value font-mono font-bold">${currentQty} &rarr; <span class="text-[#003865]">${newQty} ${escapeHtml(unit)}</span></span>
       </div>
-      ${remarks ? `
-        <div class="confirm-detail-row">
-          <span class="confirm-detail-label">Remarks:</span>
-          <span class="confirm-detail-value italic text-slate-500">${escapeHtml(remarks)}</span>
-        </div>
-      ` : ''}
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Remarks:</span>
+        <span class="confirm-detail-value italic text-slate-500">${remarks ? escapeHtml(remarks) : 'None (Optional)'}</span>
+      </div>
     `,
-    confirmText: 'Confirm & Record Transaction',
+    confirmText: 'Record Stock',
     confirmBtnClass: 'btn-primary',
     onConfirm: () => {
       const timestamp = new Date().toISOString();
@@ -1089,7 +1438,7 @@ stockForm.addEventListener('submit', (e) => {
         qtyChanged: qty,
         prevQty: currentQty,
         newQty: newQty,
-        remarks: remarks || (action === 'IN' ? 'Stock Added' : 'Stock Issued'),
+        remarks: remarks || '',
         itemName: name,
         category: category,
         unit: unit
@@ -1122,7 +1471,7 @@ stockForm.addEventListener('submit', (e) => {
       showToast(
         `${name} balance is now ${newQty} ${unit} (${action === 'IN' ? '+' : '-'}${qty})`,
         'success',
-        'Transaction Recorded'
+        'Stock Recorded'
       );
 
       // 4. Switch to Database tab
@@ -1357,6 +1706,7 @@ function openItemContextMenu(x, y, itemKey) {
 window.addEventListener('click', () => {
   itemContextMenu.classList.add('hidden');
   categoryContextMenu.classList.add('hidden');
+  if (unitContextMenu) unitContextMenu.classList.add('hidden');
 });
 
 document.getElementById('ctxViewHistory').addEventListener('click', () => {
@@ -1393,7 +1743,7 @@ function renderLogs(logs) {
       <td><strong>${escapeHtml(l.itemName)}</strong></td>
       <td>${l.action === 'IN' ? '+' : '-'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</td>
       <td>${escapeHtml(l.newQty)}</td>
-      <td><small>${escapeHtml(l.remarks || '')}</small></td>
+      <td><small class="text-slate-600">${escapeHtml(l.remarks || '—')}</small></td>
     </tr>
   `).join('');
 }
