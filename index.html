@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>NIA - Property Office Inventory System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Firebase SDKs (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+  <!-- LOGIN VIEW -->
+  <div id="loginView" class="login-container">
+    <div class="login-card">
+      <div class="login-header">
+        <i class="fa-solid fa-building-shield brand-icon"></i>
+        <h2>National Irrigation Administration</h2>
+        <p>Property & Supplies Management Office</p>
+      </div>
+      <form id="loginForm">
+        <div id="loginError" class="alert error hidden"></div>
+        <div class="form-group">
+          <label for="loginUsername">Username</label>
+          <input type="text" id="loginUsername" placeholder="Enter username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP VIEW -->
+  <div id="appView" class="app-layout hidden">
+    <!-- Fixed Top Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <i class="fa-solid fa-boxes-stacked"></i>
+        <h1>National Irrigation Administration - Property Office</h1>
+      </div>
+      <div class="header-user">
+        <span class="badge badge-admin"><i class="fa-solid fa-user-shield"></i> property</span>
+        <button id="logoutBtn" class="btn-icon" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Quick Access / Stats Bar -->
+      <section class="stats-overview">
+        <div class="stat-card">
+          <div class="stat-icon icon-blue"><i class="fa-solid fa-box"></i></div>
+          <div>
+            <div class="stat-value" id="statTotalItems">0</div>
+            <div class="stat-label">Total Unique Items</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon icon-green"><i class="fa-solid fa-check"></i></div>
+          <div>
+            <div class="stat-value" id="statInStock">0</div>
+            <div class="stat-label">In Stock</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon icon-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          <div>
+            <div class="stat-value" id="statOutOfStock">0</div>
+            <div class="stat-label">Out of Stock</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon icon-purple"><i class="fa-solid fa-tags"></i></div>
+          <div>
+            <div class="stat-value" id="statCategories">0</div>
+            <div class="stat-label">Categories</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 1: Inventory Database -->
+      <section id="tabDatabase" class="tab-section active">
+        <div class="section-toolbar">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="dbSearchInput" placeholder="Search item, category, or status...">
+          </div>
+          <div class="filter-group">
+            <select id="dbCategoryFilter">
+              <option value="">All Categories</option>
+            </select>
+            <select id="dbStatusFilter">
+              <option value="">All Statuses</option>
+              <option value="in_stock">In Stock</option>
+              <option value="out_of_stock">Out of Stock</option>
+            </select>
+          </div>
+        </div>
+        <div id="inventoryContainer" class="inventory-grid">
+          <div class="loading-spinner"><i class="fa-solid fa-spinner fa-spin"></i> Loading inventory...</div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Fill-Up Form -->
+      <section id="tabForm" class="tab-section">
+        <div class="card form-card">
+          <h2><i class="fa-solid fa-dolly"></i> Stock Management Form</h2>
+          <p class="subtitle">Record items in stock. Items reducing to 0 will be marked Out of Stock without being deleted.</p>
+          <form id="stockForm">
+            <div class="form-group">
+              <label for="stockItemName">Item Name</label>
+              <input type="text" id="stockItemName" list="itemHistoryList" placeholder="Type or select existing item..." required autocomplete="off">
+              <datalist id="itemHistoryList"></datalist>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="stockCategory">Category</label>
+                <select id="stockCategory" required>
+                  <option value="">Select Category</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="stockUnit">Unit of Measure</label>
+                <select id="stockUnit" required>
+                  <option value="pcs">Pieces (pcs)</option>
+                  <option value="boxes">Boxes</option>
+                  <option value="reams">Reams</option>
+                  <option value="sets">Sets</option>
+                  <option value="rolls">Rolls</option>
+                  <option value="packs">Packs</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Action Type</label>
+                <div class="segmented-control">
+                  <label><input type="radio" name="actionType" value="IN" checked> <span><i class="fa-solid fa-plus"></i> Stock IN</span></label>
+                  <label><input type="radio" name="actionType" value="OUT"> <span><i class="fa-solid fa-minus"></i> Stock OUT</span></label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="stockQuantity">Quantity to Add/Deduct</label>
+                <input type="number" id="stockQuantity" min="1" placeholder="1" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="stockRemarks">Remarks / Purpose / Reference</label>
+              <input type="text" id="stockRemarks" placeholder="e.g., PO #1024 or Issued to Engineering Section">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block"><i class="fa-solid fa-floppy-disk"></i> Record Transaction</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 3: Activity & Transaction Logs -->
+      <section id="tabLogs" class="tab-section">
+        <div class="card">
+          <div class="card-header-flex">
+            <h2><i class="fa-solid fa-clock-rotate-left"></i> Transaction Audit Log</h2>
+            <input type="text" id="logSearchInput" class="compact-search" placeholder="Search logs...">
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Date & Time</th>
+                  <th>Action</th>
+                  <th>Item Name</th>
+                  <th>Quantity</th>
+                  <th>Balance</th>
+                  <th>Remarks</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody">
+                <tr><td colspan="6" class="text-center">Loading activity logs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Category Management -->
+      <section id="tabCategories" class="tab-section">
+        <div class="card">
+          <h2><i class="fa-solid fa-folder-tree"></i> Category Management</h2>
+          <form id="categoryForm" class="inline-form">
+            <input type="text" id="newCategoryInput" placeholder="Enter new category name..." required>
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Category</button>
+          </form>
+          <div id="categoriesList" class="category-chips-list"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Dock Navigation Bar (Mobile / Desktop) -->
+    <nav class="bottom-dock">
+      <button class="dock-btn active" data-target="tabDatabase">
+        <i class="fa-solid fa-table-cells-large"></i>
+        <span>Database</span>
+      </button>
+      <button class="dock-btn" data-target="tabForm">
+        <i class="fa-solid fa-circle-plus"></i>
+        <span>Stock In/Out</span>
+      </button>
+      <button class="dock-btn" data-target="tabLogs">
+        <i class="fa-solid fa-clipboard-list"></i>
+        <span>Audit Logs</span>
+      </button>
+      <button class="dock-btn" data-target="tabCategories">
+        <i class="fa-solid fa-tags"></i>
+        <span>Categories</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Custom Context Menu -->
+  <div id="itemContextMenu" class="context-menu hidden">
+    <button id="ctxViewHistory"><i class="fa-solid fa-clock-rotate-left"></i> View Stock In/Out History</button>
+    <button id="ctxQuickAction"><i class="fa-solid fa-pen-to-square"></i> Quick Stock Adjustment</button>
+  </div>
+
+  <!-- Item History Modal -->
+  <div id="historyModal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalItemTitle">Item Stock History</h3>
+        <button class="modal-close" id="closeModalBtn">&times;</button>
+      </div>
+      <div class="modal-body" id="modalTimelineBody"></div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
