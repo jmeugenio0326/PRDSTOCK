@@ -99,14 +99,21 @@ const cancelRenameUnitBtn = document.getElementById('cancelRenameUnitBtn');
 const logsTableBody = document.getElementById('logsTableBody');
 const logSearchInput = document.getElementById('logSearchInput');
 
-// DOM Elements - Property & Equipment Details
+// DOM Elements - Property, Equipment, Serial & Year Details
 const hasPropertyNoToggle = document.getElementById('hasPropertyNoToggle');
 const propertyFieldsContainer = document.getElementById('propertyFieldsContainer');
 const stockPropertyNoInput = document.getElementById('stockPropertyNo');
+const stockSerialNoInput = document.getElementById('stockSerialNo');
+const stockYearInput = document.getElementById('stockYear');
 const hasOwnerToggle = document.getElementById('hasOwnerToggle');
 const ownerFieldContainer = document.getElementById('ownerFieldContainer');
 const stockOwnerInput = document.getElementById('stockOwner');
 const clearStockFormBtn = document.getElementById('clearStockFormBtn');
+
+// DOM Elements - Home Items List
+const homeItemSearchInput = document.getElementById('homeItemSearchInput');
+const homeItemsTableBody = document.getElementById('homeItemsTableBody');
+const homeItemsCountBadge = document.getElementById('homeItemsCountBadge');
 
 // Subtabs - Categories vs Units
 const tabSubBtnCategories = document.getElementById('tabSubBtnCategories');
@@ -1365,8 +1372,127 @@ function renderStockChart() {
   liveStockChart.update();
 }
 
+function renderHomeItemsList() {
+  const tableBody = document.getElementById('homeItemsTableBody');
+  const countBadge = document.getElementById('homeItemsCountBadge');
+  const searchInput = document.getElementById('homeItemSearchInput');
+  if (!tableBody) return;
+
+  const filter = searchInput ? searchInput.value.toLowerCase().trim() : '';
+  const allItems = Object.values(inventoryData);
+
+  const filtered = allItems.filter(item => {
+    if (!filter) return true;
+    return (
+      (item.name && item.name.toLowerCase().includes(filter)) ||
+      (item.category && item.category.toLowerCase().includes(filter)) ||
+      (item.serialNo && item.serialNo.toLowerCase().includes(filter)) ||
+      (item.year && item.year.toString().toLowerCase().includes(filter)) ||
+      (item.propertyNo && item.propertyNo.toLowerCase().includes(filter)) ||
+      (item.owner && item.owner.toLowerCase().includes(filter))
+    );
+  });
+
+  filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (countBadge) {
+    countBadge.textContent = `${filtered.length} ${filtered.length === 1 ? 'item' : 'items'}`;
+  }
+
+  if (filtered.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center py-8 text-slate-500">
+          <div class="flex flex-col items-center justify-center gap-1.5">
+            <i data-lucide="package-open" class="w-7 h-7 text-slate-400"></i>
+            <span class="text-xs font-medium">${filter ? 'No items match your search filter.' : 'No inventory items recorded yet.'}</span>
+          </div>
+        </td>
+      </tr>
+    `;
+    refreshIcons();
+    return;
+  }
+
+  tableBody.innerHTML = filtered.map(item => {
+    const qty = Number(item.quantity) || 0;
+    const isZero = qty === 0;
+    const isLow = qty > 0 && qty <= 5;
+
+    let statusBadge = '';
+    if (isZero) {
+      statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Out of Stock</span>';
+    } else if (isLow) {
+      statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Low Stock</span>';
+    } else {
+      statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>In Stock</span>';
+    }
+
+    const tags = [];
+    if (item.propertyNo) {
+      tags.push(`<span class="inline-flex items-center gap-1 font-mono text-[10px] font-bold bg-sky-50 text-[#003865] px-1.5 py-0.5 rounded border border-sky-200" title="Property No."><i data-lucide="file-badge" class="w-3 h-3 text-[#003865]"></i>#${escapeHtml(item.propertyNo)}</span>`);
+    }
+    if (item.serialNo) {
+      tags.push(`<span class="inline-flex items-center gap-1 font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200" title="Serial No."><i data-lucide="barcode" class="w-3 h-3 text-slate-500"></i>SN: ${escapeHtml(item.serialNo)}</span>`);
+    }
+    if (item.year) {
+      tags.push(`<span class="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-medium" title="Year"><i data-lucide="calendar" class="w-3 h-3 text-amber-600"></i>${escapeHtml(item.year)}</span>`);
+    }
+    if (item.condition) {
+      tags.push(`<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${item.condition === 'R' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}" title="Condition Grade">${escapeHtml(item.condition)}</span>`);
+    }
+
+    const tagsHtml = tags.length > 0 ? `<div class="flex flex-wrap items-center gap-1">${tags.join('')}</div>` : '<span class="text-slate-400 text-[11px] italic">Standard Item</span>';
+
+    return `
+      <tr class="hover:bg-slate-50/70 transition-colors">
+        <td class="py-2.5 px-3">
+          <div class="font-bold text-slate-900 text-xs">${escapeHtml(item.name)}</div>
+          ${item.owner ? `<div class="text-[11px] text-slate-500">Custodian: <strong class="text-slate-700">${escapeHtml(item.owner)}</strong></div>` : ''}
+        </td>
+        <td class="py-2.5 px-3">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100/90 text-slate-700 text-[11px] font-medium border border-slate-200/60">
+            <i data-lucide="tag" class="w-3 h-3 text-slate-400"></i>
+            ${escapeHtml(item.category)}
+          </span>
+        </td>
+        <td class="py-2.5 px-3">
+          ${tagsHtml}
+        </td>
+        <td class="py-2.5 px-3 text-center">
+          ${statusBadge}
+        </td>
+        <td class="py-2.5 px-3 text-right">
+          <span class="font-extrabold text-sm ${isZero ? 'text-red-600' : 'text-[#003865]'}">
+            ${qty}
+            <span class="font-normal text-xs text-slate-500">${escapeHtml(item.unit || 'pcs')}</span>
+          </span>
+        </td>
+        <td class="py-2.5 px-3 text-center">
+          <div class="flex items-center justify-center gap-1">
+            <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-2 rounded-lg flex items-center gap-1" onclick="quickRestockItem('${encodeDbKey(item.name)}')" title="Add or Deduct Stock">
+              <i data-lucide="plus-circle" class="w-3 h-3 text-emerald-600"></i>
+              <span>Stock</span>
+            </button>
+            <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-1.5 rounded-lg text-slate-600" onclick="openItemHistory('${encodeDbKey(item.name)}')" title="View History">
+              <i data-lucide="history" class="w-3 h-3"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  refreshIcons();
+}
+
+if (homeItemSearchInput) {
+  homeItemSearchInput.addEventListener('input', renderHomeItemsList);
+}
+
 function updateDashboard() {
   renderStockChart();
+  renderHomeItemsList();
 
   const items = Object.values(inventoryData);
   const outOfStock = items.filter(i => (Number(i.quantity) || 0) === 0);
@@ -1431,6 +1557,8 @@ function updateDashboard() {
 // ==========================================
 function resetStockForm() {
   stockForm.reset();
+  if (stockSerialNoInput) stockSerialNoInput.value = '';
+  if (stockYearInput) stockYearInput.value = '';
   if (hasPropertyNoToggle) hasPropertyNoToggle.checked = false;
   if (propertyFieldsContainer) propertyFieldsContainer.classList.add('hidden');
   if (stockPropertyNoInput) {
@@ -1457,6 +1585,9 @@ function populateStockFormWithItem(item, action = 'IN') {
   stockCategorySelect.value = item.category;
   const unitEl = document.getElementById('stockUnit');
   if (unitEl) unitEl.value = item.unit || 'pcs';
+
+  if (stockSerialNoInput) stockSerialNoInput.value = item.serialNo || '';
+  if (stockYearInput) stockYearInput.value = item.year || '';
 
   const radio = document.querySelector(`input[name="actionType"][value="${action}"]`);
   if (radio) radio.checked = true;
@@ -1570,6 +1701,8 @@ if (stockItemNameField) {
       if (stockCategorySelect && match.category) stockCategorySelect.value = match.category;
       const unitEl = document.getElementById('stockUnit');
       if (unitEl && match.unit) unitEl.value = match.unit;
+      if (stockSerialNoInput && match.serialNo) stockSerialNoInput.value = match.serialNo;
+      if (stockYearInput && match.year) stockYearInput.value = match.year;
       if (match.propertyNo) {
         if (hasPropertyNoToggle) hasPropertyNoToggle.checked = true;
         if (propertyFieldsContainer) propertyFieldsContainer.classList.remove('hidden');
@@ -1613,6 +1746,8 @@ stockForm.addEventListener('submit', (e) => {
   const actionRadio = document.querySelector('input[name="actionType"]:checked');
   const action = actionRadio && actionRadio.value === 'OUT' ? 'OUT' : 'IN';
   const qty = Math.max(1, Math.min(100000, parseInt(document.getElementById('stockQuantity').value, 10) || 1));
+  const serialNo = stockSerialNoInput ? stockSerialNoInput.value.trim().slice(0, 60) : '';
+  const year = stockYearInput ? stockYearInput.value.trim().slice(0, 30) : '';
   const remarks = document.getElementById('stockRemarks').value.trim().slice(0, 300);
 
   const hasProperty = hasPropertyNoToggle ? hasPropertyNoToggle.checked : false;
@@ -1673,6 +1808,18 @@ stockForm.addEventListener('submit', (e) => {
         <span class="confirm-detail-label">Inventory Balance:</span>
         <span class="confirm-detail-value font-mono font-bold">${currentQty} &rarr; <span class="text-[#003865]">${newQty} ${escapeHtml(unit)}</span></span>
       </div>
+      ${serialNo ? `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Serial No.:</span>
+          <span class="confirm-detail-value font-mono font-semibold text-slate-800">${escapeHtml(serialNo)}</span>
+        </div>
+      ` : ''}
+      ${year ? `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Year:</span>
+          <span class="confirm-detail-value font-semibold text-slate-800">${escapeHtml(year)}</span>
+        </div>
+      ` : ''}
       ${hasProperty ? `
         <div class="confirm-detail-row">
           <span class="confirm-detail-label">Property No.:</span>
@@ -1711,6 +1858,8 @@ stockForm.addEventListener('submit', (e) => {
         category: category,
         unit: unit
       };
+      if (serialNo) logEntry.serialNo = serialNo;
+      if (year) logEntry.year = year;
 
       const updatedItem = {
         name: name,
@@ -1719,6 +1868,16 @@ stockForm.addEventListener('submit', (e) => {
         quantity: newQty,
         lastUpdated: timestamp
       };
+      if (serialNo) {
+        updatedItem.serialNo = serialNo;
+      } else if (existing && existing.serialNo) {
+        updatedItem.serialNo = existing.serialNo;
+      }
+      if (year) {
+        updatedItem.year = year;
+      } else if (existing && existing.year) {
+        updatedItem.year = existing.year;
+      }
 
       if (hasProperty) {
         updatedItem.propertyNo = propertyNo;
@@ -1773,6 +1932,8 @@ function renderInventory() {
                           item.category.toLowerCase().includes(searchTerm) ||
                           (item.unit && item.unit.toLowerCase().includes(searchTerm)) ||
                           (item.propertyNo && item.propertyNo.toLowerCase().includes(searchTerm)) ||
+                          (item.serialNo && item.serialNo.toLowerCase().includes(searchTerm)) ||
+                          (item.year && item.year.toString().toLowerCase().includes(searchTerm)) ||
                           (item.owner && item.owner.toLowerCase().includes(searchTerm));
     const matchesCat = !catFilter || item.category === catFilter;
     let matchesStatus = true;
@@ -1869,6 +2030,23 @@ function renderInventory() {
               </div>
             ` : ''}
 
+            ${(item.serialNo || item.year) ? `
+              <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                ${item.serialNo ? `
+                  <span class="inline-flex items-center gap-1 text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200" title="Serial No.">
+                    <i data-lucide="barcode" class="w-3 h-3 text-slate-500"></i>
+                    <span>SN: ${escapeHtml(item.serialNo)}</span>
+                  </span>
+                ` : ''}
+                ${item.year ? `
+                  <span class="inline-flex items-center gap-1 text-[11px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-200 font-medium" title="Year">
+                    <i data-lucide="calendar" class="w-3 h-3 text-amber-600"></i>
+                    <span>Year: ${escapeHtml(item.year)}</span>
+                  </span>
+                ` : ''}
+              </div>
+            ` : ''}
+
             ${item.owner ? `
               <div class="flex items-center gap-1.5 text-[11px] text-slate-600 mb-1.5">
                 <i data-lucide="user" class="w-3 h-3 text-slate-400 flex-shrink-0"></i>
@@ -1953,10 +2131,18 @@ window.openItemHistory = function(itemKey) {
             <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Stock Added +' : 'Stock Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
             <span class="font-bold text-slate-700 ml-1.5">(New Balance: <strong class="text-[#003865]">${escapeHtml(l.newQty)} ${escapeHtml(l.unit || '')}</strong>)</span>
           </div>
-          ${l.propertyNo ? `
+          ${(l.propertyNo || l.serialNo || l.year) ? `
             <div class="mt-1.5 text-xs text-slate-600 flex flex-wrap items-center gap-1.5">
-              <span class="font-semibold text-slate-500">Property No:</span>
-              <span class="font-mono font-bold text-[#003865] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">#${escapeHtml(l.propertyNo)}</span>
+              ${l.propertyNo ? `
+                <span class="font-semibold text-slate-500">Property No:</span>
+                <span class="font-mono font-bold text-[#003865] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">#${escapeHtml(l.propertyNo)}</span>
+              ` : ''}
+              ${l.serialNo ? `
+                <span class="font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">SN: ${escapeHtml(l.serialNo)}</span>
+              ` : ''}
+              ${l.year ? `
+                <span class="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">Year: ${escapeHtml(l.year)}</span>
+              ` : ''}
               ${l.condition ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${l.condition === 'R' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}">Grade ${escapeHtml(l.condition)}</span>` : ''}
               ${l.owner ? `<span class="text-slate-600">• Custodian: <strong>${escapeHtml(l.owner)}</strong></span>` : ''}
             </div>
@@ -2064,6 +2250,8 @@ function renderLogs(logs) {
     (l.itemName && l.itemName.toLowerCase().includes(filter)) ||
     (l.remarks && l.remarks.toLowerCase().includes(filter)) ||
     (l.propertyNo && l.propertyNo.toLowerCase().includes(filter)) ||
+    (l.serialNo && l.serialNo.toLowerCase().includes(filter)) ||
+    (l.year && l.year.toString().toLowerCase().includes(filter)) ||
     (l.owner && l.owner.toLowerCase().includes(filter))
   );
 
@@ -2078,9 +2266,17 @@ function renderLogs(logs) {
       <td><span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${escapeHtml(l.action)}</span></td>
       <td>
         <strong>${escapeHtml(l.itemName)}</strong>
-        ${l.propertyNo ? `
-          <div class="text-[11px] font-mono text-[#003865] flex items-center gap-1 mt-0.5">
-            <span class="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">#${escapeHtml(l.propertyNo)}</span>
+        ${(l.propertyNo || l.serialNo || l.year) ? `
+          <div class="text-[11px] font-mono text-[#003865] flex flex-wrap items-center gap-1 mt-0.5">
+            ${l.propertyNo ? `
+              <span class="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">#${escapeHtml(l.propertyNo)}</span>
+            ` : ''}
+            ${l.serialNo ? `
+              <span class="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-normal">SN: ${escapeHtml(l.serialNo)}</span>
+            ` : ''}
+            ${l.year ? `
+              <span class="bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-normal">Yr: ${escapeHtml(l.year)}</span>
+            ` : ''}
             ${l.condition ? `<span class="font-sans font-bold text-[10px] text-slate-600">(${escapeHtml(l.condition)})</span>` : ''}
           </div>
         ` : ''}

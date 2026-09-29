@@ -1942,3 +1942,50 @@ html, body {
   gap: 0.85rem;
   margin-top: 1rem;
 }
+
+/* Home Inventory Items List Table (Below Graph) */
+.home-items-card {
+  margin-top: 1.25rem;
+  position: relative;
+}
+.home-items-table-wrapper {
+  max-height: 480px;
+  overflow-y: auto;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.home-items-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.home-items-table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(241, 245, 249, 0.96);
+  backdrop-filter: blur(10px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.home-items-table td,
+.home-items-table th {
+  padding: 0.75rem 0.85rem;
+  vertical-align: middle;
+}
+.home-items-table tbody tr {
+  transition: background-color 0.15s ease-in-out;
+}
+.home-items-table tbody tr:hover td {
+  background: rgba(248, 250, 252, 0.9);
+}
+@media (max-width: 640px) {
+  .home-items-table-wrapper {
+    max-height: 380px;
+  }
+  .home-items-table th,
+  .home-items-table td {
+    padding: 0.6rem 0.65rem;
+  }
+}
+
