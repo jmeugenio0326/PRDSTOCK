@@ -1989,3 +1989,46 @@ html, body {
   }
 }
 
+/* ====================================================
+   16. BATCH SELECTION & EXCEL EXPORT STYLES
+   ==================================================== */
+.export-scope-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.export-scope-btn:hover {
+  color: #003865;
+  background: rgba(0, 56, 101, 0.05);
+}
+.export-scope-btn.active {
+  background: #003865;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 56, 101, 0.25);
+}
+
+.batch-export-bar {
+  background: rgba(248, 250, 252, 0.7);
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.card-selection-row {
+  margin-top: -2px;
+}
+
+.stock-card.card-selected-export {
+  border-color: #003865 !important;
+  box-shadow: 0 0 0 1.5px #003865, 0 8px 24px rgba(0, 56, 101, 0.12) !important;
+  background: rgba(240, 249, 255, 0.85) !important;
+}
+
+.item-export-checkbox,
+.export-row-checkbox {
+  accent-color: #003865;
+}
+
+

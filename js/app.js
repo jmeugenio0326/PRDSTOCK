@@ -99,21 +99,44 @@ const cancelRenameUnitBtn = document.getElementById('cancelRenameUnitBtn');
 const logsTableBody = document.getElementById('logsTableBody');
 const logSearchInput = document.getElementById('logSearchInput');
 
-// DOM Elements - Property, Equipment, Serial & Year Details
-const hasPropertyNoToggle = document.getElementById('hasPropertyNoToggle');
-const propertyFieldsContainer = document.getElementById('propertyFieldsContainer');
+// State for Excel Export
+let selectedExportItemKeys = new Set();
+let activeExportScope = 'all'; // 'all' or 'selected'
+
+// DOM Elements - Stock Form Fields (Simplified, no toggles)
 const stockPropertyNoInput = document.getElementById('stockPropertyNo');
 const stockSerialNoInput = document.getElementById('stockSerialNo');
 const stockYearInput = document.getElementById('stockYear');
-const hasOwnerToggle = document.getElementById('hasOwnerToggle');
-const ownerFieldContainer = document.getElementById('ownerFieldContainer');
-const stockOwnerInput = document.getElementById('stockOwner');
+const stockPriceInput = document.getElementById('stockPrice');
+const stockRemarksInput = document.getElementById('stockRemarks');
 const clearStockFormBtn = document.getElementById('clearStockFormBtn');
 
 // DOM Elements - Home Items List
 const homeItemSearchInput = document.getElementById('homeItemSearchInput');
 const homeItemsTableBody = document.getElementById('homeItemsTableBody');
 const homeItemsCountBadge = document.getElementById('homeItemsCountBadge');
+
+// DOM Elements - Database Batch Selection
+const dbSelectAllCheck = document.getElementById('dbSelectAllCheck');
+const dbSelectedCountBadge = document.getElementById('dbSelectedCountBadge');
+const dbClearSelectionBtn = document.getElementById('dbClearSelectionBtn');
+const dbGoToExportBtn = document.getElementById('dbGoToExportBtn');
+
+// DOM Elements - Export Section
+const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+const scopeAllBtn = document.getElementById('scopeAllBtn');
+const scopeSelectedBtn = document.getElementById('scopeSelectedBtn');
+const selectAllExportBtn = document.getElementById('selectAllExportBtn');
+const clearSelectionExportBtn = document.getElementById('clearSelectionExportBtn');
+const exportSearchInput = document.getElementById('exportSearchInput');
+const exportPreviewTableBody = document.getElementById('exportPreviewTableBody');
+const exportPreviewBadge = document.getElementById('exportPreviewBadge');
+const metricExportItems = document.getElementById('metricExportItems');
+const metricExportQty = document.getElementById('metricExportQty');
+const metricExportValue = document.getElementById('metricExportValue');
+const exportAllCount = document.getElementById('exportAllCount');
+const exportSelectedCount = document.getElementById('exportSelectedCount');
 
 // Subtabs - Categories vs Units
 const tabSubBtnCategories = document.getElementById('tabSubBtnCategories');
@@ -279,6 +302,8 @@ function refreshAllViews() {
   refreshUnitSelects();
   updateHistoryDatalist();
   renderLogs(logsData);
+  renderExportPreview();
+  updateDatabaseSelectionUI();
   if (liveStockChart) liveStockChart.resize();
   refreshIcons();
 }
@@ -681,6 +706,8 @@ document.querySelectorAll('.dock-btn').forEach(btn => {
       if (liveStockChart) liveStockChart.resize();
     } else if (btn.dataset.target === 'tabDatabase') {
       renderInventory();
+    } else if (btn.dataset.target === 'tabExport') {
+      renderExportPreview();
     } else if (btn.dataset.target === 'tabCategories') {
       renderCategoriesList();
     } else if (btn.dataset.target === 'tabLogs') {
@@ -1557,20 +1584,11 @@ function updateDashboard() {
 // ==========================================
 function resetStockForm() {
   stockForm.reset();
+  if (stockPropertyNoInput) stockPropertyNoInput.value = '';
   if (stockSerialNoInput) stockSerialNoInput.value = '';
   if (stockYearInput) stockYearInput.value = '';
-  if (hasPropertyNoToggle) hasPropertyNoToggle.checked = false;
-  if (propertyFieldsContainer) propertyFieldsContainer.classList.add('hidden');
-  if (stockPropertyNoInput) {
-    stockPropertyNoInput.removeAttribute('required');
-    stockPropertyNoInput.value = '';
-  }
-  if (hasOwnerToggle) hasOwnerToggle.checked = false;
-  if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
-  if (stockOwnerInput) stockOwnerInput.value = '';
-
-  const defaultCondition = document.querySelector('input[name="itemCondition"][value="A1"]');
-  if (defaultCondition) defaultCondition.checked = true;
+  if (stockPriceInput) stockPriceInput.value = '';
+  if (stockRemarksInput) stockRemarksInput.value = '';
 
   const inRadio = document.querySelector('input[name="actionType"][value="IN"]');
   if (inRadio) inRadio.checked = true;
@@ -1581,52 +1599,21 @@ function resetStockForm() {
 function populateStockFormWithItem(item, action = 'IN') {
   if (!item) return;
   document.querySelector('[data-target="tabForm"]').click();
-  document.getElementById('stockItemName').value = item.name;
-  stockCategorySelect.value = item.category;
+  document.getElementById('stockItemName').value = item.name || '';
+  if (stockCategorySelect) stockCategorySelect.value = item.category || '';
   const unitEl = document.getElementById('stockUnit');
   if (unitEl) unitEl.value = item.unit || 'pcs';
-
-  if (stockSerialNoInput) stockSerialNoInput.value = item.serialNo || '';
-  if (stockYearInput) stockYearInput.value = item.year || '';
 
   const radio = document.querySelector(`input[name="actionType"][value="${action}"]`);
   if (radio) radio.checked = true;
 
   document.getElementById('stockQuantity').value = '';
 
-  if (item.propertyNo) {
-    if (hasPropertyNoToggle) hasPropertyNoToggle.checked = true;
-    if (propertyFieldsContainer) propertyFieldsContainer.classList.remove('hidden');
-    if (stockPropertyNoInput) {
-      stockPropertyNoInput.setAttribute('required', 'true');
-      stockPropertyNoInput.value = item.propertyNo;
-    }
-
-    if (item.owner) {
-      if (hasOwnerToggle) hasOwnerToggle.checked = true;
-      if (ownerFieldContainer) ownerFieldContainer.classList.remove('hidden');
-      if (stockOwnerInput) stockOwnerInput.value = item.owner;
-    } else {
-      if (hasOwnerToggle) hasOwnerToggle.checked = false;
-      if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
-      if (stockOwnerInput) stockOwnerInput.value = '';
-    }
-
-    if (item.condition) {
-      const condRadio = document.querySelector(`input[name="itemCondition"][value="${item.condition}"]`);
-      if (condRadio) condRadio.checked = true;
-    }
-  } else {
-    if (hasPropertyNoToggle) hasPropertyNoToggle.checked = false;
-    if (propertyFieldsContainer) propertyFieldsContainer.classList.add('hidden');
-    if (stockPropertyNoInput) {
-      stockPropertyNoInput.removeAttribute('required');
-      stockPropertyNoInput.value = '';
-    }
-    if (hasOwnerToggle) hasOwnerToggle.checked = false;
-    if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
-    if (stockOwnerInput) stockOwnerInput.value = '';
-  }
+  if (stockPropertyNoInput) stockPropertyNoInput.value = item.propertyNo || '';
+  if (stockSerialNoInput) stockSerialNoInput.value = item.serialNo || '';
+  if (stockYearInput) stockYearInput.value = item.year || '';
+  if (stockPriceInput) stockPriceInput.value = (item.price !== undefined && item.price !== null && item.price !== '') ? item.price : '';
+  if (stockRemarksInput) stockRemarksInput.value = item.remarks || '';
 
   document.getElementById('stockQuantity').focus();
   refreshIcons();
@@ -1642,51 +1629,11 @@ window.openQuickAdjustment = function(itemKey) {
   populateStockFormWithItem(item, 'IN');
 };
 
-// Wire Property No. Toggle Switch
-if (hasPropertyNoToggle) {
-  hasPropertyNoToggle.addEventListener('change', () => {
-    if (hasPropertyNoToggle.checked) {
-      if (propertyFieldsContainer) propertyFieldsContainer.classList.remove('hidden');
-      if (stockPropertyNoInput) {
-        stockPropertyNoInput.setAttribute('required', 'true');
-        setTimeout(() => stockPropertyNoInput.focus(), 80);
-      }
-    } else {
-      if (propertyFieldsContainer) propertyFieldsContainer.classList.add('hidden');
-      if (stockPropertyNoInput) {
-        stockPropertyNoInput.removeAttribute('required');
-        stockPropertyNoInput.value = '';
-      }
-      if (hasOwnerToggle) hasOwnerToggle.checked = false;
-      if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
-      if (stockOwnerInput) stockOwnerInput.value = '';
-
-      const defaultCondition = document.querySelector('input[name="itemCondition"][value="A1"]');
-      if (defaultCondition) defaultCondition.checked = true;
-    }
-    refreshIcons();
-  });
-}
-
-// Wire Owner / Custodian Toggle Switch
-if (hasOwnerToggle) {
-  hasOwnerToggle.addEventListener('change', () => {
-    if (hasOwnerToggle.checked) {
-      if (ownerFieldContainer) ownerFieldContainer.classList.remove('hidden');
-      if (stockOwnerInput) setTimeout(() => stockOwnerInput.focus(), 80);
-    } else {
-      if (ownerFieldContainer) ownerFieldContainer.classList.add('hidden');
-      if (stockOwnerInput) stockOwnerInput.value = '';
-    }
-    refreshIcons();
-  });
-}
-
 // Wire Clear Form Button
 if (clearStockFormBtn) {
   clearStockFormBtn.addEventListener('click', () => {
     resetStockForm();
-    showToast('Stock form fields and toggles cleared.', 'info', 'Form Cleared');
+    showToast('Stock form fields cleared.', 'info', 'Form Cleared');
   });
 }
 
@@ -1696,28 +1643,19 @@ if (stockItemNameField) {
   stockItemNameField.addEventListener('input', () => {
     const val = stockItemNameField.value.trim().toLowerCase();
     if (!val) return;
-    const match = Object.values(inventoryData).find(i => i.name.toLowerCase() === val);
+    const match = Object.values(inventoryData).find(i => i.name && i.name.toLowerCase() === val);
     if (match) {
       if (stockCategorySelect && match.category) stockCategorySelect.value = match.category;
       const unitEl = document.getElementById('stockUnit');
       if (unitEl && match.unit) unitEl.value = match.unit;
+      if (stockPropertyNoInput && match.propertyNo) stockPropertyNoInput.value = match.propertyNo;
       if (stockSerialNoInput && match.serialNo) stockSerialNoInput.value = match.serialNo;
       if (stockYearInput && match.year) stockYearInput.value = match.year;
-      if (match.propertyNo) {
-        if (hasPropertyNoToggle) hasPropertyNoToggle.checked = true;
-        if (propertyFieldsContainer) propertyFieldsContainer.classList.remove('hidden');
-        if (stockPropertyNoInput) stockPropertyNoInput.value = match.propertyNo;
-        if (match.owner) {
-          if (hasOwnerToggle) hasOwnerToggle.checked = true;
-          if (ownerFieldContainer) ownerFieldContainer.classList.remove('hidden');
-          if (stockOwnerInput) stockOwnerInput.value = match.owner;
-        }
-        if (match.condition) {
-          const condRadio = document.querySelector(`input[name="itemCondition"][value="${match.condition}"]`);
-          if (condRadio) condRadio.checked = true;
-        }
-        refreshIcons();
+      if (stockPriceInput && match.price !== undefined && match.price !== null && match.price !== '') {
+        stockPriceInput.value = match.price;
       }
+      if (stockRemarksInput && match.remarks) stockRemarksInput.value = match.remarks;
+      refreshIcons();
     }
   });
 }
@@ -1740,31 +1678,24 @@ function updateHistoryDatalist() {
 stockForm.addEventListener('submit', (e) => {
   e.preventDefault();
 
-  const name = document.getElementById('stockItemName').value.trim().slice(0, 80);
+  const name = document.getElementById('stockItemName').value.trim().slice(0, 100);
   const category = stockCategorySelect.value.trim().slice(0, 50);
   const unit = document.getElementById('stockUnit').value.trim().slice(0, 20);
   const actionRadio = document.querySelector('input[name="actionType"]:checked');
   const action = actionRadio && actionRadio.value === 'OUT' ? 'OUT' : 'IN';
   const qty = Math.max(1, Math.min(100000, parseInt(document.getElementById('stockQuantity').value, 10) || 1));
+
+  // Optional fields: Property No, Serial No, Year, Price, Remarks
+  const propertyNo = stockPropertyNoInput ? stockPropertyNoInput.value.trim().slice(0, 60) : '';
   const serialNo = stockSerialNoInput ? stockSerialNoInput.value.trim().slice(0, 60) : '';
   const year = stockYearInput ? stockYearInput.value.trim().slice(0, 30) : '';
-  const remarks = document.getElementById('stockRemarks').value.trim().slice(0, 300);
+  const priceRaw = stockPriceInput ? stockPriceInput.value.trim() : '';
+  const price = priceRaw !== '' ? Math.max(0, parseFloat(priceRaw) || 0) : null;
+  const remarks = stockRemarksInput ? stockRemarksInput.value.trim().slice(0, 300) : '';
 
-  const hasProperty = hasPropertyNoToggle ? hasPropertyNoToggle.checked : false;
-  const propertyNo = hasProperty && stockPropertyNoInput ? stockPropertyNoInput.value.trim().slice(0, 60) : '';
-  const hasOwner = hasProperty && hasOwnerToggle ? hasOwnerToggle.checked : false;
-  const owner = hasOwner && stockOwnerInput ? stockOwnerInput.value.trim().slice(0, 80) : '';
-  const condRadio = document.querySelector('input[name="itemCondition"]:checked');
-  const condition = hasProperty && condRadio ? condRadio.value : '';
-
+  // Required validations: Item name, Category, Unit, Quantity
   if (!name || !category || !unit) {
-    showToast('Please fill out all required fields.', 'warning', 'Form Incomplete');
-    return;
-  }
-
-  if (hasProperty && !propertyNo) {
-    showToast('Please enter the Property No. or switch off the Property toggle.', 'warning', 'Property No. Required');
-    if (stockPropertyNoInput) stockPropertyNoInput.focus();
+    showToast('Please fill out all required fields (Item Name, Category, and Unit).', 'warning', 'Form Incomplete');
     return;
   }
 
@@ -1774,20 +1705,13 @@ stockForm.addEventListener('submit', (e) => {
   const currentQty = existing ? (Number(existing.quantity) || 0) : 0;
   const newQty = action === 'IN' ? currentQty + qty : Math.max(0, currentQty - qty);
 
-  const conditionLabels = {
-    'A1': 'A1 (Serviceable - Below 5 yrs old)',
-    'A2': 'A2 (Serviceable - Above 5 yrs old)',
-    'A3': 'A3 (Unserviceable - Repairable)',
-    'R': 'R (Condemned - Impossible to repair)'
-  };
-
-  // Open Glass Confirmation Dialog before committing
+  // Open Universal Confirmation Dialog before committing
   openConfirmDialog({
     title: 'Confirm Stock Movement',
     message: 'Please review and confirm this stock movement before recording:',
     detailsHtml: `
       <div class="confirm-detail-row">
-        <span class="confirm-detail-label">Item Name:</span>
+        <span class="confirm-detail-label">Item Description:</span>
         <span class="confirm-detail-value font-semibold text-slate-900">${escapeHtml(name)}</span>
       </div>
       <div class="confirm-detail-row">
@@ -1808,6 +1732,12 @@ stockForm.addEventListener('submit', (e) => {
         <span class="confirm-detail-label">Inventory Balance:</span>
         <span class="confirm-detail-value font-mono font-bold">${currentQty} &rarr; <span class="text-[#003865]">${newQty} ${escapeHtml(unit)}</span></span>
       </div>
+      ${propertyNo ? `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Property No.:</span>
+          <span class="confirm-detail-value font-mono font-bold text-[#003865]">#${escapeHtml(propertyNo)}</span>
+        </div>
+      ` : ''}
       ${serialNo ? `
         <div class="confirm-detail-row">
           <span class="confirm-detail-label">Serial No.:</span>
@@ -1820,22 +1750,10 @@ stockForm.addEventListener('submit', (e) => {
           <span class="confirm-detail-value font-semibold text-slate-800">${escapeHtml(year)}</span>
         </div>
       ` : ''}
-      ${hasProperty ? `
+      ${price !== null ? `
         <div class="confirm-detail-row">
-          <span class="confirm-detail-label">Property No.:</span>
-          <span class="confirm-detail-value font-mono font-bold text-[#003865]">${escapeHtml(propertyNo)}</span>
-        </div>
-        ${owner ? `
-          <div class="confirm-detail-row">
-            <span class="confirm-detail-label">Accountable Officer:</span>
-            <span class="confirm-detail-value font-medium text-slate-800">${escapeHtml(owner)}</span>
-          </div>
-        ` : ''}
-        <div class="confirm-detail-row">
-          <span class="confirm-detail-label">Condition Grade:</span>
-          <span class="confirm-detail-value font-bold ${condition === 'R' ? 'text-red-600' : 'text-slate-800'}">
-            ${escapeHtml(conditionLabels[condition] || condition)}
-          </span>
+          <span class="confirm-detail-label">Unit Price:</span>
+          <span class="confirm-detail-value font-mono font-bold text-emerald-700">₱${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
       ` : ''}
       <div class="confirm-detail-row">
@@ -1858,8 +1776,10 @@ stockForm.addEventListener('submit', (e) => {
         category: category,
         unit: unit
       };
+      if (propertyNo) logEntry.propertyNo = propertyNo;
       if (serialNo) logEntry.serialNo = serialNo;
       if (year) logEntry.year = year;
+      if (price !== null) logEntry.price = price;
 
       const updatedItem = {
         name: name,
@@ -1868,35 +1788,43 @@ stockForm.addEventListener('submit', (e) => {
         quantity: newQty,
         lastUpdated: timestamp
       };
+
+      // Handle optional properties
+      if (propertyNo) {
+        updatedItem.propertyNo = propertyNo;
+      } else if (existing && existing.propertyNo) {
+        updatedItem.propertyNo = existing.propertyNo;
+      }
+
       if (serialNo) {
         updatedItem.serialNo = serialNo;
       } else if (existing && existing.serialNo) {
         updatedItem.serialNo = existing.serialNo;
       }
+
       if (year) {
         updatedItem.year = year;
       } else if (existing && existing.year) {
         updatedItem.year = existing.year;
       }
 
-      if (hasProperty) {
-        updatedItem.propertyNo = propertyNo;
-        updatedItem.owner = owner;
-        updatedItem.condition = condition;
-        logEntry.propertyNo = propertyNo;
-        if (owner) logEntry.owner = owner;
-        if (condition) logEntry.condition = condition;
-      } else if (existing) {
-        if (existing.propertyNo) updatedItem.propertyNo = existing.propertyNo;
-        if (existing.owner) updatedItem.owner = existing.owner;
-        if (existing.condition) updatedItem.condition = existing.condition;
+      if (price !== null) {
+        updatedItem.price = price;
+      } else if (existing && existing.price !== undefined && existing.price !== null) {
+        updatedItem.price = existing.price;
+      }
+
+      if (remarks) {
+        updatedItem.remarks = remarks;
+      } else if (existing && existing.remarks) {
+        updatedItem.remarks = existing.remarks;
       }
 
       // 1. Optimistic Immediate Update
       inventoryData[itemKey] = updatedItem;
       logsData.unshift(logEntry);
 
-      // 2. Persist to Firebase
+      // 2. Persist to Firebase Realtime Database
       db.ref(`inventory/${itemKey}`).update(updatedItem);
       db.ref(`inventory/${itemKey}/logs`).push(logEntry);
       db.ref('activity_logs').push(logEntry);
@@ -1928,13 +1856,13 @@ function renderInventory() {
 
   const filtered = items.filter(item => {
     const qtyNum = Number(item.quantity) || 0;
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm) ||
-                          item.category.toLowerCase().includes(searchTerm) ||
+    const matchesSearch = (item.name && item.name.toLowerCase().includes(searchTerm)) ||
+                          (item.category && item.category.toLowerCase().includes(searchTerm)) ||
                           (item.unit && item.unit.toLowerCase().includes(searchTerm)) ||
                           (item.propertyNo && item.propertyNo.toLowerCase().includes(searchTerm)) ||
                           (item.serialNo && item.serialNo.toLowerCase().includes(searchTerm)) ||
                           (item.year && item.year.toString().toLowerCase().includes(searchTerm)) ||
-                          (item.owner && item.owner.toLowerCase().includes(searchTerm));
+                          (item.remarks && item.remarks.toLowerCase().includes(searchTerm));
     const matchesCat = !catFilter || item.category === catFilter;
     let matchesStatus = true;
     if (statusFilter === 'in_stock') matchesStatus = qtyNum > 0;
@@ -1960,6 +1888,7 @@ function renderInventory() {
         </button>
       </div>
     `;
+    updateDatabaseSelectionUI();
     refreshIcons();
     return;
   }
@@ -1970,13 +1899,6 @@ function renderInventory() {
     if (!grouped[item.category]) grouped[item.category] = [];
     grouped[item.category].push(item);
   });
-
-  const conditionShort = {
-    'A1': '< 5 yrs',
-    'A2': '> 5 yrs',
-    'A3': 'Repairable',
-    'R': 'Condemned'
-  };
 
   let html = '';
   for (const [catName, catItems] of Object.entries(grouped)) {
@@ -2001,35 +1923,42 @@ function renderInventory() {
       const dateDisplay = lastDate 
         ? `${lastDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} • ${lastDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
         : 'Recent Entry';
+      const isSelected = selectedExportItemKeys.has(item.name);
 
       html += `
-        <div class="stock-card ${isZero ? 'zero-stock' : ''} flex flex-col justify-between" data-key="${encodeDbKey(item.key)}">
+        <div class="stock-card ${isZero ? 'zero-stock' : ''} ${isSelected ? 'card-selected-export' : ''} flex flex-col justify-between" data-key="${encodeDbKey(item.key)}">
           <div>
-            <div class="flex justify-between items-start gap-2 mb-1.5">
-              <h4 class="card-title text-sm font-bold text-slate-900 leading-tight">${escapeHtml(item.name)}</h4>
+            <!-- Batch Export Checkbox & Status Header -->
+            <div class="card-selection-row flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-slate-100">
+              <label class="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-slate-700 select-none" onclick="event.stopPropagation()">
+                <input type="checkbox" class="item-export-checkbox rounded text-[#003865] cursor-pointer w-4 h-4" data-item-name="${escapeHtml(item.name)}" ${isSelected ? 'checked' : ''}>
+                <span class="text-[11px] text-slate-500">Select for Export</span>
+              </label>
               <span class="badge-status ${isZero ? 'status-out' : (isLow ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'status-in')}">
                 ${isZero ? 'Out of Stock' : (isLow ? 'Low Stock' : 'In Stock')}
               </span>
             </div>
-            <div class="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5">
-              <i data-lucide="tag" class="w-3.5 h-3.5 text-slate-400"></i>
-              <span>${escapeHtml(item.category)}</span>
+
+            <!-- Title & Category -->
+            <div class="mb-1.5">
+              <h4 class="card-title text-sm font-bold text-slate-900 leading-tight">${escapeHtml(item.name)}</h4>
+              <div class="flex items-center gap-1.5 text-xs text-slate-500 mt-1">
+                <i data-lucide="tag" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>${escapeHtml(item.category)}</span>
+              </div>
             </div>
 
+            <!-- Metadata: Property No. (Optional) -->
             ${item.propertyNo ? `
               <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
                 <span class="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-sky-50 text-[#003865] px-2 py-0.5 rounded border border-sky-200" title="Government Property No.">
                   <i data-lucide="file-badge" class="w-3 h-3 text-[#003865]"></i>
                   <span>#${escapeHtml(item.propertyNo)}</span>
                 </span>
-                ${item.condition ? `
-                  <span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${item.condition === 'R' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}" title="Item Condition Grade">
-                    ${escapeHtml(item.condition)}${conditionShort[item.condition] ? ': ' + conditionShort[item.condition] : ''}
-                  </span>
-                ` : ''}
               </div>
             ` : ''}
 
+            <!-- Metadata: Serial No. & Year (Optional) -->
             ${(item.serialNo || item.year) ? `
               <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
                 ${item.serialNo ? `
@@ -2047,10 +1976,20 @@ function renderInventory() {
               </div>
             ` : ''}
 
-            ${item.owner ? `
-              <div class="flex items-center gap-1.5 text-[11px] text-slate-600 mb-1.5">
-                <i data-lucide="user" class="w-3 h-3 text-slate-400 flex-shrink-0"></i>
-                <span class="truncate">Custodian: <strong>${escapeHtml(item.owner)}</strong></span>
+            <!-- Metadata: Price (Optional) -->
+            ${(item.price !== undefined && item.price !== null && item.price !== '') ? `
+              <div class="flex items-center gap-1.5 mb-1.5">
+                <span class="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-semibold" title="Item Price">
+                  <i data-lucide="badge-dollar-sign" class="w-3 h-3 text-emerald-700"></i>
+                  <span>₱${Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </span>
+              </div>
+            ` : ''}
+
+            <!-- Metadata: Remarks / Note (Optional) -->
+            ${item.remarks ? `
+              <div class="text-[11px] text-slate-500 italic mb-2 line-clamp-2" title="${escapeHtml(item.remarks)}">
+                <span class="font-medium text-slate-600 not-italic">Note:</span> ${escapeHtml(item.remarks)}
               </div>
             ` : ''}
 
@@ -2086,9 +2025,444 @@ function renderInventory() {
   }
 
   inventoryContainer.innerHTML = html;
+
+  // Wire item export checkboxes
+  document.querySelectorAll('.item-export-checkbox').forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation();
+      const itemName = cb.dataset.itemName;
+      const card = cb.closest('.stock-card');
+      if (cb.checked) {
+        selectedExportItemKeys.add(itemName);
+        if (card) card.classList.add('card-selected-export');
+      } else {
+        selectedExportItemKeys.delete(itemName);
+        if (card) card.classList.remove('card-selected-export');
+      }
+      updateDatabaseSelectionUI();
+      renderExportPreview();
+    });
+  });
+
   attachCardEvents();
+  updateDatabaseSelectionUI();
   refreshIcons();
 }
+
+// ==========================================
+// 10.1 DATABASE BATCH SELECTION & EXCEL EXPORT ENGINE
+// ==========================================
+function updateDatabaseSelectionUI() {
+  const allFilteredCheckboxes = Array.from(document.querySelectorAll('.item-export-checkbox'));
+  const checkedBoxes = allFilteredCheckboxes.filter(cb => cb.checked);
+
+  if (dbSelectedCountBadge) {
+    dbSelectedCountBadge.textContent = `${selectedExportItemKeys.size} selected`;
+  }
+  if (exportSelectedCount) {
+    exportSelectedCount.textContent = selectedExportItemKeys.size;
+  }
+  if (exportAllCount) {
+    exportAllCount.textContent = Object.keys(inventoryData).length;
+  }
+
+  if (dbClearSelectionBtn) {
+    if (selectedExportItemKeys.size > 0) {
+      dbClearSelectionBtn.classList.remove('hidden');
+    } else {
+      dbClearSelectionBtn.classList.add('hidden');
+    }
+  }
+
+  if (dbSelectAllCheck) {
+    if (allFilteredCheckboxes.length > 0 && checkedBoxes.length === allFilteredCheckboxes.length) {
+      dbSelectAllCheck.checked = true;
+      dbSelectAllCheck.indeterminate = false;
+    } else if (checkedBoxes.length > 0) {
+      dbSelectAllCheck.checked = false;
+      dbSelectAllCheck.indeterminate = true;
+    } else {
+      dbSelectAllCheck.checked = false;
+      dbSelectAllCheck.indeterminate = false;
+    }
+  }
+}
+
+function getExportDataset() {
+  const allItems = Object.values(inventoryData);
+  let dataset = [];
+
+  if (activeExportScope === 'selected') {
+    dataset = allItems.filter(item => selectedExportItemKeys.has(item.name));
+  } else {
+    dataset = [...allItems];
+  }
+
+  const query = exportSearchInput ? exportSearchInput.value.toLowerCase().trim() : '';
+  if (query) {
+    dataset = dataset.filter(item => {
+      return (
+        (item.name && item.name.toLowerCase().includes(query)) ||
+        (item.category && item.category.toLowerCase().includes(query)) ||
+        (item.unit && item.unit.toLowerCase().includes(query)) ||
+        (item.propertyNo && item.propertyNo.toLowerCase().includes(query)) ||
+        (item.serialNo && item.serialNo.toLowerCase().includes(query)) ||
+        (item.year && item.year.toString().toLowerCase().includes(query)) ||
+        (item.remarks && item.remarks.toLowerCase().includes(query))
+      );
+    });
+  }
+
+  // Sort alphabetically by item name
+  dataset.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  return dataset;
+}
+
+function renderExportPreview() {
+  const tbody = document.getElementById('exportPreviewTableBody');
+  if (!tbody) return;
+
+  const dataset = getExportDataset();
+  const allCount = Object.keys(inventoryData).length;
+  const selCount = selectedExportItemKeys.size;
+
+  if (exportAllCount) exportAllCount.textContent = allCount;
+  if (exportSelectedCount) exportSelectedCount.textContent = selCount;
+  if (exportPreviewBadge) exportPreviewBadge.textContent = `${dataset.length} row${dataset.length === 1 ? '' : 's'} ready`;
+
+  // Calculate metrics
+  const totalVolume = dataset.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0);
+  const totalValue = dataset.reduce((acc, i) => {
+    const p = parseFloat(i.price);
+    const q = Number(i.quantity) || 0;
+    return acc + (isNaN(p) ? 0 : p * q);
+  }, 0);
+
+  if (metricExportItems) metricExportItems.textContent = dataset.length;
+  if (metricExportQty) metricExportQty.textContent = totalVolume.toLocaleString();
+  if (metricExportValue) {
+    metricExportValue.textContent = '₱' + totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  // Active state on scope buttons
+  if (scopeAllBtn && scopeSelectedBtn) {
+    if (activeExportScope === 'all') {
+      scopeAllBtn.classList.add('active');
+      scopeSelectedBtn.classList.remove('active');
+    } else {
+      scopeSelectedBtn.classList.add('active');
+      scopeAllBtn.classList.remove('active');
+    }
+  }
+
+  if (dataset.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" class="text-center py-10 text-slate-500">
+          <div class="flex flex-col items-center justify-center gap-2">
+            <i data-lucide="file-x" class="w-8 h-8 text-slate-400"></i>
+            <span class="font-bold text-sm text-slate-700">No rows to display in preview</span>
+            <span class="text-xs text-slate-400 max-w-sm text-center">
+              ${activeExportScope === 'selected' 
+                ? 'No items are currently selected. Click "Select All" above, select items in the Database tab, or switch to "All Items".'
+                : 'No inventory items match your search filter.'}
+            </span>
+            ${activeExportScope === 'selected' ? `
+              <button type="button" class="btn btn-secondary glass-btn text-xs py-1.5 px-3 mt-1" onclick="setExportScope('all')">
+                Switch to All Items
+              </button>
+            ` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+    refreshIcons();
+    return;
+  }
+
+  // Exact 8-column preview layout matching user specification:
+  // Quantity | UNIT | DESCRIPTION(ITEM) | Property NO. | SERIAL NO. | YEAR | PRICE | REMARK
+  tbody.innerHTML = dataset.map((item, idx) => {
+    const isSelected = selectedExportItemKeys.has(item.name);
+    const priceDisplay = (item.price !== undefined && item.price !== null && item.price !== '')
+      ? `₱${Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : '—';
+
+    return `
+      <tr class="hover:bg-blue-50/50 transition-colors ${isSelected ? 'bg-sky-50/40' : ''}">
+        <td class="py-2 px-3 border-r border-slate-200/80 text-center font-mono text-[11px] text-slate-400">${idx + 1}</td>
+        <td class="py-2 px-3 border-r border-slate-200/80 text-center">
+          <input type="checkbox" class="export-row-checkbox rounded text-[#003865] cursor-pointer w-4 h-4" data-item-name="${escapeHtml(item.name)}" ${isSelected ? 'checked' : ''}>
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 text-right font-bold text-[#003865] font-mono text-xs">
+          ${escapeHtml(item.quantity !== undefined ? item.quantity : 0)}
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 text-center font-semibold text-slate-700">
+          ${escapeHtml(item.unit || '—')}
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 font-bold text-slate-900">
+          ${escapeHtml(item.name || '—')}
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 font-mono text-[11px] text-slate-800">
+          ${item.propertyNo ? escapeHtml(item.propertyNo) : '—'}
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 font-mono text-[11px] text-slate-600">
+          ${item.serialNo ? escapeHtml(item.serialNo) : '—'}
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 text-center text-slate-700 font-mono text-xs">
+          ${item.year ? escapeHtml(item.year) : '—'}
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 text-right font-mono font-semibold text-emerald-800 text-xs">
+          ${priceDisplay}
+        </td>
+        <td class="py-2 px-3 text-slate-600 italic text-[11px]">
+          ${item.remarks ? escapeHtml(item.remarks) : '—'}
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Row selection checkboxes inside preview table
+  tbody.querySelectorAll('.export-row-checkbox').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const name = cb.dataset.itemName;
+      if (cb.checked) {
+        selectedExportItemKeys.add(name);
+      } else {
+        selectedExportItemKeys.delete(name);
+      }
+      updateDatabaseSelectionUI();
+      renderExportPreview();
+    });
+  });
+
+  refreshIcons();
+}
+
+window.setExportScope = function(scope) {
+  activeExportScope = scope;
+  renderExportPreview();
+};
+
+function downloadExcelFile() {
+  const dataset = getExportDataset();
+  if (dataset.length === 0) {
+    showToast('There are no items to export. Select items or switch to "All Items".', 'warning', 'Export Empty');
+    return;
+  }
+
+  // Exact 8-column construct requested by user:
+  // Quantity | UNIT | DESCRIPTION(ITEM) | Property NO. | SERIAL NO. | YEAR | PRICE | REMARK
+  const headers = [
+    'Quantity',
+    'UNIT',
+    'DESCRIPTION(ITEM)',
+    'Property NO.',
+    'SERIAL NO.',
+    'YEAR',
+    'PRICE',
+    'REMARK'
+  ];
+
+  const rows = dataset.map(item => [
+    item.quantity !== undefined && item.quantity !== null && item.quantity !== '' ? Number(item.quantity) : 0,
+    item.unit || '',
+    item.name || '',
+    item.propertyNo || '',
+    item.serialNo || '',
+    item.year ? String(item.year) : '',
+    item.price !== undefined && item.price !== null && item.price !== '' ? Number(item.price) : '',
+    item.remarks || ''
+  ]);
+
+  if (window.XLSX && typeof XLSX.utils !== 'undefined') {
+    const aoa = [headers, ...rows];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Apply auto-fit column widths
+    ws['!cols'] = [
+      { wch: 12 }, // Quantity
+      { wch: 10 }, // UNIT
+      { wch: 36 }, // DESCRIPTION(ITEM)
+      { wch: 24 }, // Property NO.
+      { wch: 22 }, // SERIAL NO.
+      { wch: 12 }, // YEAR
+      { wch: 15 }, // PRICE
+      { wch: 32 }  // REMARK
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'INVENTORY_STOCK');
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `NIA_Property_Office_Stock_Export_${dateStr}.xlsx`;
+
+    XLSX.writeFile(wb, filename);
+
+    showToast(
+      `Exported ${dataset.length} items to ${filename}`,
+      'success',
+      'Excel File Ready'
+    );
+  } else {
+    downloadCsvFile();
+  }
+}
+
+function downloadCsvFile() {
+  const dataset = getExportDataset();
+  if (dataset.length === 0) {
+    showToast('There are no items to export.', 'warning', 'Export Empty');
+    return;
+  }
+
+  const headers = [
+    'Quantity',
+    'UNIT',
+    'DESCRIPTION(ITEM)',
+    'Property NO.',
+    'SERIAL NO.',
+    'YEAR',
+    'PRICE',
+    'REMARK'
+  ];
+
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const rows = dataset.map(item => [
+    item.quantity !== undefined && item.quantity !== null ? item.quantity : 0,
+    escapeCsv(item.unit || ''),
+    escapeCsv(item.name || ''),
+    escapeCsv(item.propertyNo || ''),
+    escapeCsv(item.serialNo || ''),
+    escapeCsv(item.year || ''),
+    item.price !== undefined && item.price !== null && item.price !== '' ? Number(item.price).toFixed(2) : '',
+    escapeCsv(item.remarks || '')
+  ].join(','));
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `NIA_Property_Office_Stock_Export_${dateStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast(`Downloaded CSV export with ${dataset.length} items.`, 'success', 'CSV File Ready');
+}
+
+// Database Batch Selection Events
+if (dbSelectAllCheck) {
+  dbSelectAllCheck.addEventListener('change', () => {
+    const isChecked = dbSelectAllCheck.checked;
+    const allFilteredCheckboxes = Array.from(document.querySelectorAll('.item-export-checkbox'));
+    allFilteredCheckboxes.forEach(cb => {
+      const name = cb.dataset.itemName;
+      const card = cb.closest('.stock-card');
+      cb.checked = isChecked;
+      if (isChecked) {
+        selectedExportItemKeys.add(name);
+        if (card) card.classList.add('card-selected-export');
+      } else {
+        selectedExportItemKeys.delete(name);
+        if (card) card.classList.remove('card-selected-export');
+      }
+    });
+    updateDatabaseSelectionUI();
+    renderExportPreview();
+  });
+}
+
+if (dbClearSelectionBtn) {
+  dbClearSelectionBtn.addEventListener('click', () => {
+    selectedExportItemKeys.clear();
+    document.querySelectorAll('.item-export-checkbox').forEach(cb => {
+      cb.checked = false;
+      const card = cb.closest('.stock-card');
+      if (card) card.classList.remove('card-selected-export');
+    });
+    updateDatabaseSelectionUI();
+    renderExportPreview();
+    showToast('Selection cleared.', 'info', 'Selection Cleared');
+  });
+}
+
+if (dbGoToExportBtn) {
+  dbGoToExportBtn.addEventListener('click', () => {
+    if (selectedExportItemKeys.size > 0) {
+      activeExportScope = 'selected';
+    } else {
+      activeExportScope = 'all';
+    }
+    const exportNavBtn = document.querySelector('.dock-btn[data-target="tabExport"]');
+    if (exportNavBtn) exportNavBtn.click();
+    renderExportPreview();
+  });
+}
+
+// Export Section Events
+if (scopeAllBtn) {
+  scopeAllBtn.addEventListener('click', () => {
+    activeExportScope = 'all';
+    renderExportPreview();
+  });
+}
+
+if (scopeSelectedBtn) {
+  scopeSelectedBtn.addEventListener('click', () => {
+    activeExportScope = 'selected';
+    renderExportPreview();
+  });
+}
+
+if (selectAllExportBtn) {
+  selectAllExportBtn.addEventListener('click', () => {
+    Object.values(inventoryData).forEach(i => selectedExportItemKeys.add(i.name));
+    document.querySelectorAll('.item-export-checkbox').forEach(cb => {
+      cb.checked = true;
+      const card = cb.closest('.stock-card');
+      if (card) card.classList.add('card-selected-export');
+    });
+    updateDatabaseSelectionUI();
+    renderExportPreview();
+    showToast(`Selected all items for export.`, 'info', 'All Items Selected');
+  });
+}
+
+if (clearSelectionExportBtn) {
+  clearSelectionExportBtn.addEventListener('click', () => {
+    selectedExportItemKeys.clear();
+    document.querySelectorAll('.item-export-checkbox').forEach(cb => {
+      cb.checked = false;
+      const card = cb.closest('.stock-card');
+      if (card) card.classList.remove('card-selected-export');
+    });
+    updateDatabaseSelectionUI();
+    renderExportPreview();
+    showToast('Cleared all export selections.', 'info', 'Selection Cleared');
+  });
+}
+
+if (exportSearchInput) {
+  exportSearchInput.addEventListener('input', renderExportPreview);
+}
+
+if (downloadExcelBtn) {
+  downloadExcelBtn.addEventListener('click', downloadExcelFile);
+}
+
+if (downloadCsvBtn) {
+  downloadCsvBtn.addEventListener('click', downloadCsvFile);
+}
+
 
 window.openItemHistory = function(itemKey) {
   activeContextItem = itemKey;
@@ -2131,7 +2505,7 @@ window.openItemHistory = function(itemKey) {
             <span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${l.action === 'IN' ? 'Stock Added +' : 'Stock Reduced -'}${escapeHtml(l.qtyChanged)} ${escapeHtml(l.unit || '')}</span>
             <span class="font-bold text-slate-700 ml-1.5">(New Balance: <strong class="text-[#003865]">${escapeHtml(l.newQty)} ${escapeHtml(l.unit || '')}</strong>)</span>
           </div>
-          ${(l.propertyNo || l.serialNo || l.year) ? `
+          ${(l.propertyNo || l.serialNo || l.year || l.price) ? `
             <div class="mt-1.5 text-xs text-slate-600 flex flex-wrap items-center gap-1.5">
               ${l.propertyNo ? `
                 <span class="font-semibold text-slate-500">Property No:</span>
@@ -2143,8 +2517,9 @@ window.openItemHistory = function(itemKey) {
               ${l.year ? `
                 <span class="text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">Year: ${escapeHtml(l.year)}</span>
               ` : ''}
-              ${l.condition ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${l.condition === 'R' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}">Grade ${escapeHtml(l.condition)}</span>` : ''}
-              ${l.owner ? `<span class="text-slate-600">• Custodian: <strong>${escapeHtml(l.owner)}</strong></span>` : ''}
+              ${l.price ? `
+                <span class="text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold">₱${Number(l.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              ` : ''}
             </div>
           ` : ''}
           <div class="timeline-notes mt-1.5 text-xs text-slate-600">
@@ -2251,8 +2626,7 @@ function renderLogs(logs) {
     (l.remarks && l.remarks.toLowerCase().includes(filter)) ||
     (l.propertyNo && l.propertyNo.toLowerCase().includes(filter)) ||
     (l.serialNo && l.serialNo.toLowerCase().includes(filter)) ||
-    (l.year && l.year.toString().toLowerCase().includes(filter)) ||
-    (l.owner && l.owner.toLowerCase().includes(filter))
+    (l.year && l.year.toString().toLowerCase().includes(filter))
   );
 
   if (filtered.length === 0) {
@@ -2266,7 +2640,7 @@ function renderLogs(logs) {
       <td><span class="${l.action === 'IN' ? 'badge-in' : 'badge-out'}">${escapeHtml(l.action)}</span></td>
       <td>
         <strong>${escapeHtml(l.itemName)}</strong>
-        ${(l.propertyNo || l.serialNo || l.year) ? `
+        ${(l.propertyNo || l.serialNo || l.year || l.price) ? `
           <div class="text-[11px] font-mono text-[#003865] flex flex-wrap items-center gap-1 mt-0.5">
             ${l.propertyNo ? `
               <span class="bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">#${escapeHtml(l.propertyNo)}</span>
@@ -2277,7 +2651,9 @@ function renderLogs(logs) {
             ${l.year ? `
               <span class="bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-normal">Yr: ${escapeHtml(l.year)}</span>
             ` : ''}
-            ${l.condition ? `<span class="font-sans font-bold text-[10px] text-slate-600">(${escapeHtml(l.condition)})</span>` : ''}
+            ${l.price ? `
+              <span class="bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold font-sans">₱${Number(l.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            ` : ''}
           </div>
         ` : ''}
       </td>
@@ -2285,7 +2661,6 @@ function renderLogs(logs) {
       <td>${escapeHtml(l.newQty)}</td>
       <td>
         <small class="text-slate-600 block">${escapeHtml(l.remarks || '—')}</small>
-        ${l.owner ? `<small class="text-slate-500 font-medium block">Custodian: ${escapeHtml(l.owner)}</small>` : ''}
       </td>
     </tr>
   `).join('');
