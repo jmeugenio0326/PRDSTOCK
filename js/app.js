@@ -722,7 +722,7 @@ window.openStockFormWithAction = function(action) {
   const safeAction = action === 'OUT' ? 'OUT' : 'IN';
   const radio = document.querySelector(`input[name="actionType"][value="${safeAction}"]`);
   if (radio) radio.checked = true;
-  document.getElementById('stockItemName').focus();
+  document.getElementById('stockQuantity').focus();
   refreshIcons();
 };
 

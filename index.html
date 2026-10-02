@@ -378,22 +378,64 @@
           <h2><i data-lucide="truck" class="w-5 h-5 inline mr-1"></i> Stock Management Form</h2>
           <p class="subtitle">Record inventory stock transactions. Required fields are marked with (*), all other fields are optional.</p>
           <form id="stockForm" autocomplete="off">
-            <!-- Item Name / Description (Required) -->
+            <!-- 1. Action Type (Repositioned to First, above Item description) -->
             <div class="form-group mb-3">
-              <label for="stockItemName" class="font-semibold text-xs text-slate-800 flex items-center justify-between">
+              <label class="font-semibold text-xs text-slate-800 mb-1.5 flex items-center justify-between">
                 <span class="flex items-center gap-1.5">
-                  <i data-lucide="package" class="w-3.5 h-3.5 text-[#003865]"></i>
-                  <span>Item Description / Name</span>
+                  <i data-lucide="arrow-left-right" class="w-3.5 h-3.5 text-[#003865]"></i>
+                  <span>Action Type</span>
                   <span class="text-red-500 font-bold">*</span>
                 </span>
                 <span class="text-[11px] font-normal text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Required</span>
               </label>
-              <input type="text" id="stockItemName" list="itemHistoryList" placeholder="Type or select existing item description..." required autocomplete="off" maxlength="100" class="glass-input">
-              <datalist id="itemHistoryList"></datalist>
+              <div class="segmented-control glass-segmented">
+                <label><input type="radio" name="actionType" value="IN" checked> <span><i data-lucide="plus" class="w-3.5 h-3.5"></i> Stock IN</span></label>
+                <label><input type="radio" name="actionType" value="OUT"> <span><i data-lucide="minus" class="w-3.5 h-3.5"></i> Stock OUT</span></label>
+              </div>
             </div>
 
-            <!-- Category & Unit (Required) -->
+            <!-- 2. Quantity & UNIT (Required - Matching Export Layout) -->
             <div class="form-row mb-3">
+              <div class="form-group">
+                <label for="stockQuantity" class="font-semibold text-xs text-slate-800 flex items-center justify-between">
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="layers" class="w-3.5 h-3.5 text-[#003865]"></i>
+                    <span>Quantity</span>
+                    <span class="text-red-500 font-bold">*</span>
+                  </span>
+                  <span class="text-[11px] font-normal text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Required</span>
+                </label>
+                <input type="number" id="stockQuantity" min="1" max="100000" placeholder="1" required class="glass-input">
+              </div>
+              <div class="form-group">
+                <label for="stockUnit" class="font-semibold text-xs text-slate-800 flex items-center justify-between">
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="scale" class="w-3.5 h-3.5 text-[#003865]"></i>
+                    <span>UNIT</span>
+                    <span class="text-red-500 font-bold">*</span>
+                  </span>
+                  <span class="text-[11px] font-normal text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Required</span>
+                </label>
+                <select id="stockUnit" required class="glass-select">
+                  <option value="">Select Unit</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 3. DESCRIPTION(ITEM) & Category (Required - Matching Export Layout) -->
+            <div class="form-row mb-3">
+              <div class="form-group">
+                <label for="stockItemName" class="font-semibold text-xs text-slate-800 flex items-center justify-between">
+                  <span class="flex items-center gap-1.5">
+                    <i data-lucide="package" class="w-3.5 h-3.5 text-[#003865]"></i>
+                    <span>DESCRIPTION(ITEM)</span>
+                    <span class="text-red-500 font-bold">*</span>
+                  </span>
+                  <span class="text-[11px] font-normal text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Required</span>
+                </label>
+                <input type="text" id="stockItemName" list="itemHistoryList" placeholder="Type or select existing item description..." required autocomplete="off" maxlength="100" class="glass-input">
+                <datalist id="itemHistoryList"></datalist>
+              </div>
               <div class="form-group">
                 <label for="stockCategory" class="font-semibold text-xs text-slate-800 flex items-center justify-between">
                   <span class="flex items-center gap-1.5">
@@ -407,50 +449,15 @@
                   <option value="">Select Category</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label for="stockUnit" class="font-semibold text-xs text-slate-800 flex items-center justify-between">
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="scale" class="w-3.5 h-3.5 text-[#003865]"></i>
-                    <span>Unit</span>
-                    <span class="text-red-500 font-bold">*</span>
-                  </span>
-                  <span class="text-[11px] font-normal text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Required</span>
-                </label>
-                <select id="stockUnit" required class="glass-select">
-                  <option value="">Select Unit</option>
-                </select>
-              </div>
             </div>
 
-            <!-- Action Type & Quantity (Required) -->
-            <div class="form-row mb-3">
-              <div class="form-group">
-                <label class="font-semibold text-xs text-slate-800">Action Type</label>
-                <div class="segmented-control glass-segmented">
-                  <label><input type="radio" name="actionType" value="IN" checked> <span><i data-lucide="plus" class="w-3.5 h-3.5"></i> Stock IN</span></label>
-                  <label><input type="radio" name="actionType" value="OUT"> <span><i data-lucide="minus" class="w-3.5 h-3.5"></i> Stock OUT</span></label>
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="stockQuantity" class="font-semibold text-xs text-slate-800 flex items-center justify-between">
-                  <span class="flex items-center gap-1.5">
-                    <i data-lucide="layers" class="w-3.5 h-3.5 text-[#003865]"></i>
-                    <span>Quantity</span>
-                    <span class="text-red-500 font-bold">*</span>
-                  </span>
-                  <span class="text-[11px] font-normal text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Required</span>
-                </label>
-                <input type="number" id="stockQuantity" min="1" max="100000" placeholder="1" required class="glass-input">
-              </div>
-            </div>
-
-            <!-- Property No. & Serial No. (Optional - Normal label & textboxes, NO toggle) -->
+            <!-- 4. Property NO. & SERIAL NO. (Optional - Matching Export Layout) -->
             <div class="form-row mb-3">
               <div class="form-group">
                 <label for="stockPropertyNo" class="flex items-center justify-between font-semibold text-xs text-slate-800">
                   <span class="flex items-center gap-1.5">
                     <i data-lucide="hash" class="w-3.5 h-3.5 text-[#003865]"></i>
-                    <span>Property No.</span>
+                    <span>Property NO.</span>
                   </span>
                   <span class="text-[11px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Optional</span>
                 </label>
@@ -460,7 +467,7 @@
                 <label for="stockSerialNo" class="flex items-center justify-between font-semibold text-xs text-slate-800">
                   <span class="flex items-center gap-1.5">
                     <i data-lucide="barcode" class="w-3.5 h-3.5 text-[#003865]"></i>
-                    <span>Serial No.</span>
+                    <span>SERIAL NO.</span>
                   </span>
                   <span class="text-[11px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Optional</span>
                 </label>
@@ -468,13 +475,13 @@
               </div>
             </div>
 
-            <!-- Year & Price (Optional) -->
+            <!-- 5. YEAR & PRICE (Optional - Matching Export Layout) -->
             <div class="form-row mb-3">
               <div class="form-group">
                 <label for="stockYear" class="flex items-center justify-between font-semibold text-xs text-slate-800">
                   <span class="flex items-center gap-1.5">
                     <i data-lucide="calendar" class="w-3.5 h-3.5 text-[#003865]"></i>
-                    <span>Year</span>
+                    <span>YEAR</span>
                   </span>
                   <span class="text-[11px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Optional</span>
                 </label>
@@ -484,7 +491,7 @@
                 <label for="stockPrice" class="flex items-center justify-between font-semibold text-xs text-slate-800">
                   <span class="flex items-center gap-1.5">
                     <i data-lucide="badge-dollar-sign" class="w-3.5 h-3.5 text-emerald-700"></i>
-                    <span>Price (₱ / PHP)</span>
+                    <span>PRICE (₱ / PHP)</span>
                   </span>
                   <span class="text-[11px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Optional</span>
                 </label>
@@ -492,12 +499,12 @@
               </div>
             </div>
 
-            <!-- Remarks Textarea (Optional) -->
+            <!-- 6. REMARK (Optional - Matching Export Layout) -->
             <div class="form-group mb-4">
               <label for="stockRemarks" class="flex items-center justify-between font-semibold text-xs text-slate-800">
                 <span class="flex items-center gap-1.5">
                   <i data-lucide="message-square" class="w-3.5 h-3.5 text-[#003865]"></i>
-                  <span>Remark / Reference</span>
+                  <span>REMARK</span>
                 </span>
                 <span class="text-[11px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Optional</span>
               </label>
