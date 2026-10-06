@@ -102,6 +102,7 @@ const logSearchInput = document.getElementById('logSearchInput');
 // State for Excel Export
 let selectedExportItemKeys = new Set();
 let activeExportScope = 'all'; // 'all' or 'selected'
+let currentHomeTypeTab = 'Office Supplies'; // 'Office Supplies', 'Equipments', or 'Both'
 
 // DOM Elements - Stock Form Fields (Simplified, no toggles)
 const stockPropertyNoInput = document.getElementById('stockPropertyNo');
@@ -111,16 +112,50 @@ const stockPriceInput = document.getElementById('stockPrice');
 const stockRemarksInput = document.getElementById('stockRemarks');
 const clearStockFormBtn = document.getElementById('clearStockFormBtn');
 
-// DOM Elements - Home Items List
+// DOM Elements - Home Items List & 2 Lists Switcher
 const homeItemSearchInput = document.getElementById('homeItemSearchInput');
-const homeItemsTableBody = document.getElementById('homeItemsTableBody');
 const homeItemsCountBadge = document.getElementById('homeItemsCountBadge');
+const homeTabOfficeSupplies = document.getElementById('homeTabOfficeSupplies');
+const homeTabEquipments = document.getElementById('homeTabEquipments');
+const homeTabBoth = document.getElementById('homeTabBoth');
+const homeOfficeCountBadge = document.getElementById('homeOfficeCountBadge');
+const homeEquipmentCountBadge = document.getElementById('homeEquipmentCountBadge');
+const homeListsContainer = document.getElementById('homeListsContainer');
 
-// DOM Elements - Database Batch Selection
+// DOM Elements - Database Batch Selection & Removal
 const dbSelectAllCheck = document.getElementById('dbSelectAllCheck');
 const dbSelectedCountBadge = document.getElementById('dbSelectedCountBadge');
 const dbClearSelectionBtn = document.getElementById('dbClearSelectionBtn');
 const dbGoToExportBtn = document.getElementById('dbGoToExportBtn');
+const dbRemoveSelectedBtn = document.getElementById('dbRemoveSelectedBtn');
+const dbRemoveCountBadge = document.getElementById('dbRemoveCountBadge');
+
+// DOM Elements - Category Modals
+const categoryTypeModal = document.getElementById('categoryTypeModal');
+const categoryTypeForm = document.getElementById('categoryTypeForm');
+const typeModalCategoryName = document.getElementById('typeModalCategoryName');
+const closeTypeModalBtn = document.getElementById('closeTypeModalBtn');
+const cancelTypeModalBtn = document.getElementById('cancelTypeModalBtn');
+const typeOfficeSuppliesRadio = document.getElementById('typeOfficeSuppliesRadio');
+const typeEquipmentsRadio = document.getElementById('typeEquipmentsRadio');
+
+const categoryValueModal = document.getElementById('categoryValueModal');
+const categoryValueForm = document.getElementById('categoryValueForm');
+const valueModalCategoryName = document.getElementById('valueModalCategoryName');
+const categoryValueThresholdInput = document.getElementById('categoryValueThresholdInput');
+const highValueNameInput = document.getElementById('highValueNameInput');
+const lowValueNameInput = document.getElementById('lowValueNameInput');
+const existingValueBox = document.getElementById('existingValueBox');
+const toggleExistingValueAccordion = document.getElementById('toggleExistingValueAccordion');
+const existingHighValLabel = document.getElementById('existingHighValLabel');
+const existingLowValLabel = document.getElementById('existingLowValLabel');
+const existingValueDetailText = document.getElementById('existingValueDetailText');
+const existingValueToggleLabel = document.getElementById('existingValueToggleLabel');
+const existingValueChevron = document.getElementById('existingValueChevron');
+const valueRulePreviewText = document.getElementById('valueRulePreviewText');
+const clearValueRuleBtn = document.getElementById('clearValueRuleBtn');
+const closeValueModalBtn = document.getElementById('closeValueModalBtn');
+const cancelValueModalBtn = document.getElementById('cancelValueModalBtn');
 
 // DOM Elements - Export Section
 const downloadExcelBtn = document.getElementById('downloadExcelBtn');
@@ -176,6 +211,32 @@ function encodeDbKey(name) {
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
     .slice(0, 80);
+}
+
+function getCategoryType(categoryName) {
+  if (!categoryName) return 'Office Supplies';
+  const cat = categoriesData.find(c => (c.name || '').toLowerCase() === categoryName.toLowerCase());
+  if (cat && cat.type) return cat.type;
+  if (categoryName.toLowerCase().includes('equipment')) return 'Equipments';
+  return 'Office Supplies';
+}
+
+function getCategoryValueRule(categoryName) {
+  if (!categoryName) return null;
+  const cat = categoriesData.find(c => (c.name || '').toLowerCase() === categoryName.toLowerCase());
+  return (cat && cat.valueRule) ? cat.valueRule : null;
+}
+
+function getItemValueLabel(item) {
+  if (!item) return '';
+  const rule = getCategoryValueRule(item.category);
+  if (!rule) return '';
+  const price = parseFloat(item.price);
+  if (isNaN(price)) return '';
+  const threshold = parseFloat(rule.threshold) || 0;
+  const highName = rule.highName || (rule.condition !== 'below' && rule.name ? rule.name : 'High Value');
+  const lowName = rule.lowName || (rule.condition === 'below' && rule.name ? rule.name : 'Low Value');
+  return price >= threshold ? highName : lowName;
 }
 
 async function computeSecureHash(pin) {
@@ -733,12 +794,33 @@ function initDataListeners() {
   db.ref('categories').on('value', (snap) => {
     categoriesData = [];
     snap.forEach(child => {
-      categoriesData.push({ key: child.key, name: String(child.val() || '') });
+      const val = child.val();
+      if (typeof val === 'object' && val !== null) {
+        const name = String(val.name || '');
+        const type = val.type || (name.toLowerCase().includes('equipment') ? 'Equipments' : 'Office Supplies');
+        categoriesData.push({
+          key: child.key,
+          name: name,
+          type: type,
+          valueRule: val.valueRule || null
+        });
+      } else {
+        const name = String(val || '');
+        const type = name.toLowerCase().includes('equipment') ? 'Equipments' : 'Office Supplies';
+        categoriesData.push({
+          key: child.key,
+          name: name,
+          type: type,
+          valueRule: null
+        });
+      }
     });
     refreshCategorySelects();
     renderCategoriesList();
     updateStats();
     renderInventory();
+    renderHomeItemsList();
+    renderStockChart();
   });
 
   db.ref('units').on('value', (snap) => {
@@ -785,14 +867,30 @@ function renderCategoriesList() {
 
   categoriesData.forEach(cat => {
     const count = getCategoryItemCount(cat.name);
+    const catType = cat.type || (cat.name.toLowerCase().includes('equipment') ? 'Equipments' : 'Office Supplies');
     const chip = document.createElement('div');
     chip.className = 'category-chip glass-subpanel flex items-center justify-between gap-2.5';
     chip.dataset.key = cat.key;
     chip.dataset.name = cat.name;
+
+    const typeBadge = catType === 'Equipments'
+      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">Equipments</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">Office Supplies</span>`;
+
+    const valueBadge = (cat.valueRule && (cat.valueRule.threshold !== undefined || cat.valueRule.name))
+      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1" title="Value Classification: High &amp; Low Value (Threshold: ₱${Number(cat.valueRule.threshold || 0).toLocaleString()})"><i data-lucide="badge-dollar-sign" class="w-3 h-3"></i>High &amp; Low Value</span>`
+      : '';
+
     chip.innerHTML = `
       <div class="flex items-center gap-2 min-w-0">
         <i data-lucide="folder" class="w-4 h-4 text-[#003865] flex-shrink-0"></i>
-        <span class="category-chip-name font-semibold text-slate-800 truncate">${escapeHtml(cat.name)}</span>
+        <div class="flex flex-col min-w-0">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="category-chip-name font-semibold text-slate-800 truncate">${escapeHtml(cat.name)}</span>
+            ${typeBadge}
+            ${valueBadge}
+          </div>
+        </div>
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0">
         <span class="category-count-badge" title="${count} item(s) in this category">${count}</span>
@@ -869,7 +967,15 @@ renameCategoryForm.addEventListener('submit', (e) => {
     confirmText: 'Rename Category',
     confirmBtnClass: 'btn-primary',
     onConfirm: () => {
-      db.ref(`categories/${key}`).set(newName);
+      const found = categoriesData.find(c => c.key === key);
+      const catType = found ? (found.type || 'Office Supplies') : 'Office Supplies';
+      const catRule = found ? (found.valueRule || null) : null;
+
+      db.ref(`categories/${key}`).set({
+        name: newName,
+        type: catType,
+        valueRule: catRule
+      });
 
       const updates = {};
       Object.entries(inventoryData).forEach(([itemKey, item]) => {
@@ -883,7 +989,6 @@ renameCategoryForm.addEventListener('submit', (e) => {
         db.ref().update(updates);
       }
 
-      const found = categoriesData.find(c => c.key === key);
       if (found) found.name = newName;
 
       renameCategoryModal.classList.add('hidden');
@@ -896,6 +1001,203 @@ renameCategoryForm.addEventListener('submit', (e) => {
 
 closeRenameModalBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 cancelRenameBtn.addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
+
+// 6.1 CATEGORY TYPE CLASSIFICATION HANDLERS
+const ctxSetCategoryType = document.getElementById('ctxSetCategoryType');
+if (ctxSetCategoryType) {
+  ctxSetCategoryType.addEventListener('click', () => {
+    if (!activeContextCategory) return;
+    categoryContextMenu.classList.add('hidden');
+
+    const cat = categoriesData.find(c => c.key === activeContextCategory.key);
+    const catType = cat ? getCategoryType(cat.name) : 'Office Supplies';
+
+    if (typeModalCategoryName) {
+      typeModalCategoryName.textContent = `Category: ${activeContextCategory.name}`;
+    }
+
+    if (catType === 'Equipments') {
+      if (typeEquipmentsRadio) typeEquipmentsRadio.checked = true;
+    } else {
+      if (typeOfficeSuppliesRadio) typeOfficeSuppliesRadio.checked = true;
+    }
+
+    categoryTypeModal.classList.remove('hidden');
+    refreshIcons();
+  });
+}
+
+if (closeTypeModalBtn) closeTypeModalBtn.addEventListener('click', () => categoryTypeModal.classList.add('hidden'));
+if (cancelTypeModalBtn) cancelTypeModalBtn.addEventListener('click', () => categoryTypeModal.classList.add('hidden'));
+
+if (categoryTypeForm) {
+  categoryTypeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!activeContextCategory) return;
+    const selectedType = document.querySelector('input[name="selectedCategoryType"]:checked')?.value || 'Office Supplies';
+    const cat = categoriesData.find(c => c.key === activeContextCategory.key);
+    if (!cat) return;
+
+    cat.type = selectedType;
+    await db.ref(`categories/${cat.key}`).set({
+      name: cat.name,
+      type: cat.type,
+      valueRule: cat.valueRule || null
+    });
+
+    categoryTypeModal.classList.add('hidden');
+    refreshAllViews();
+    showToast(`Category "${cat.name}" set to ${selectedType}`, 'success', 'Type Updated');
+  });
+}
+
+// 6.2 CATEGORY VALUE CLASSIFICATION HANDLERS
+const ctxCategoryValue = document.getElementById('ctxCategoryValue');
+
+function updateValuePreviewText() {
+  if (!categoryValueThresholdInput) return;
+  const thresh = parseFloat(categoryValueThresholdInput.value) || 0;
+  const high = (highValueNameInput && highValueNameInput.value.trim()) || 'High Value';
+  const low = (lowValueNameInput && lowValueNameInput.value.trim()) || 'Low Value';
+  if (valueRulePreviewText) {
+    valueRulePreviewText.innerHTML = `Items priced <strong>&ge; ₱${thresh.toLocaleString()}</strong> are labeled "<strong>${escapeHtml(high)}</strong>", and <strong>&lt; ₱${thresh.toLocaleString()}</strong> are labeled "<strong>${escapeHtml(low)}</strong>" in preview, database & export.`;
+  }
+}
+
+if (ctxCategoryValue) {
+  ctxCategoryValue.addEventListener('click', () => {
+    if (!activeContextCategory) return;
+    categoryContextMenu.classList.add('hidden');
+
+    const cat = categoriesData.find(c => c.key === activeContextCategory.key);
+    if (!cat) return;
+
+    if (valueModalCategoryName) {
+      valueModalCategoryName.textContent = `Category: ${cat.name}`;
+    }
+
+    const existingRule = cat.valueRule;
+    const hasExisting = Boolean(existingRule && (existingRule.threshold !== undefined || existingRule.name));
+
+    if (hasExisting) {
+      const thresh = existingRule.threshold !== undefined ? existingRule.threshold : 15000;
+      const highName = existingRule.highName || (existingRule.condition !== 'below' && existingRule.name ? existingRule.name : 'High Value');
+      const lowName = existingRule.lowName || (existingRule.condition === 'below' && existingRule.name ? existingRule.name : 'Low Value');
+
+      if (existingValueBox) existingValueBox.classList.remove('hidden');
+      if (existingHighValLabel) existingHighValLabel.textContent = highName;
+      if (existingLowValLabel) existingLowValLabel.textContent = lowName;
+      if (existingValueDetailText) {
+        existingValueDetailText.textContent = `Threshold: ₱${Number(thresh).toLocaleString()} (≥ ₱${Number(thresh).toLocaleString()} is ${highName}, < ₱${Number(thresh).toLocaleString()} is ${lowName})`;
+      }
+      if (existingValueToggleLabel) existingValueToggleLabel.textContent = 'Edit in Form';
+      if (clearValueRuleBtn) clearValueRuleBtn.classList.remove('hidden');
+
+      if (categoryValueThresholdInput) categoryValueThresholdInput.value = thresh;
+      if (highValueNameInput) highValueNameInput.value = highName;
+      if (lowValueNameInput) lowValueNameInput.value = lowName;
+    } else {
+      if (existingValueBox) existingValueBox.classList.add('hidden');
+      if (clearValueRuleBtn) clearValueRuleBtn.classList.add('hidden');
+
+      if (categoryValueThresholdInput) categoryValueThresholdInput.value = '15000';
+      if (highValueNameInput) highValueNameInput.value = 'High Value';
+      if (lowValueNameInput) lowValueNameInput.value = 'Low Value';
+    }
+
+    updateValuePreviewText();
+    categoryValueModal.classList.remove('hidden');
+    refreshIcons();
+    setTimeout(() => categoryValueThresholdInput && categoryValueThresholdInput.focus(), 100);
+  });
+}
+
+if (toggleExistingValueAccordion) {
+  toggleExistingValueAccordion.addEventListener('click', () => {
+    if (categoryValueThresholdInput) {
+      categoryValueThresholdInput.focus();
+      categoryValueThresholdInput.select();
+    }
+  });
+}
+
+if (categoryValueThresholdInput) categoryValueThresholdInput.addEventListener('input', updateValuePreviewText);
+if (highValueNameInput) highValueNameInput.addEventListener('input', updateValuePreviewText);
+if (lowValueNameInput) lowValueNameInput.addEventListener('input', updateValuePreviewText);
+
+if (closeValueModalBtn) closeValueModalBtn.addEventListener('click', () => categoryValueModal.classList.add('hidden'));
+if (cancelValueModalBtn) cancelValueModalBtn.addEventListener('click', () => categoryValueModal.classList.add('hidden'));
+
+if (clearValueRuleBtn) {
+  clearValueRuleBtn.addEventListener('click', () => {
+    if (!activeContextCategory) return;
+    const cat = categoriesData.find(c => c.key === activeContextCategory.key);
+    if (!cat) return;
+
+    openConfirmDialog({
+      title: 'Remove Value Classification',
+      message: `Are you sure you want to remove the value classification for "${cat.name}"?`,
+      detailsHtml: `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Category:</span>
+          <span class="confirm-detail-value font-bold text-slate-900">${escapeHtml(cat.name)}</span>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-2">Items in this category will no longer have HIGH or LOW Value assigned.</p>
+      `,
+      confirmText: 'Yes, Remove Classification',
+      confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700 shadow-sm',
+      iconTheme: 'danger',
+      onConfirm: async () => {
+        cat.valueRule = null;
+        await db.ref(`categories/${cat.key}`).set({
+          name: cat.name,
+          type: cat.type || 'Office Supplies',
+          valueRule: null
+        });
+
+        categoryValueModal.classList.add('hidden');
+        refreshAllViews();
+        showToast(`Value classification removed for "${cat.name}"`, 'info', 'Classification Removed');
+      }
+    });
+  });
+}
+
+if (categoryValueForm) {
+  categoryValueForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!activeContextCategory) return;
+    const cat = categoriesData.find(c => c.key === activeContextCategory.key);
+    if (!cat) return;
+
+    const threshold = parseFloat(categoryValueThresholdInput.value);
+    if (isNaN(threshold) || threshold < 0) {
+      showToast('Please enter a valid price threshold (₱).', 'error', 'Invalid Threshold');
+      return;
+    }
+
+    const highName = (highValueNameInput.value || '').trim().slice(0, 50) || 'High Value';
+    const lowName = (lowValueNameInput.value || '').trim().slice(0, 50) || 'Low Value';
+
+    const valueRule = {
+      threshold: threshold,
+      highName: highName,
+      lowName: lowName
+    };
+
+    cat.valueRule = valueRule;
+
+    await db.ref(`categories/${cat.key}`).set({
+      name: cat.name,
+      type: cat.type || 'Office Supplies',
+      valueRule: valueRule
+    });
+
+    categoryValueModal.classList.add('hidden');
+    refreshAllViews();
+    showToast(`Saved: "${highName}" & "${lowName}" (Threshold: ₱${threshold.toLocaleString()}) for "${cat.name}"`, 'success', 'Classification Saved');
+  });
+}
 
 // Remove Category with Confirmation
 document.getElementById('ctxRemoveCategory').addEventListener('click', () => {
@@ -937,8 +1239,14 @@ categoryForm.addEventListener('submit', (e) => {
   const input = document.getElementById('newCategoryInput');
   const cat = input.value.trim().slice(0, 50);
   if (cat) {
-    const newRef = db.ref('categories').push(cat);
-    categoriesData.push({ key: newRef.key, name: cat });
+    const isEquip = cat.toLowerCase().includes('equipment');
+    const newCatData = {
+      name: cat,
+      type: isEquip ? 'Equipments' : 'Office Supplies',
+      valueRule: null
+    };
+    const newRef = db.ref('categories').push(newCatData);
+    categoriesData.push({ key: newRef.key, ...newCatData });
     input.value = '';
     refreshCategorySelects();
     refreshAllViews();
@@ -1221,7 +1529,9 @@ function startLiveClock() {
 // 7.1 RECENT STOCK ITEMS RETRIEVER (10 RECENT ITEMS)
 // ==========================================
 function getRecentStockItems(limit = 10) {
-  const items = Object.entries(inventoryData).map(([key, val]) => ({ key, ...val }));
+  const items = Object.entries(inventoryData)
+    .map(([key, val]) => ({ key, ...val }))
+    .filter(item => getCategoryType(item.category) === 'Office Supplies'); // Equipments will NOT appear in graph; only Office supplies
   if (items.length === 0) return [];
 
   // Sort descending by last updated timestamp (newest activity first)
@@ -1363,26 +1673,35 @@ function renderStockChart() {
   if (currentGraphMode === 'recent') {
     const recentItems = getRecentStockItems(10);
     if (recentItems.length === 0) {
-      liveStockChart.data.labels = ['No Stock Items'];
+      liveStockChart.data.labels = ['No Office Supplies'];
       liveStockChart.data.datasets[0].data = [0];
-      liveStockChart.data.datasets[0].label = 'No Items in Inventory';
+      liveStockChart.data.datasets[0].label = 'No Office Supplies in Inventory';
     } else {
       liveStockChart.data.labels = recentItems.map(item => {
         const name = item.name || '';
         return name.length > 14 ? name.slice(0, 13) + '…' : name;
       });
       liveStockChart.data.datasets[0].data = recentItems.map(item => Number(item.quantity) || 0);
-      liveStockChart.data.datasets[0].label = '10 Recent Stock Items (Current Quantity)';
+      liveStockChart.data.datasets[0].label = '10 Recent Office Supplies (Current Quantity)';
     }
     if (liveStockChart.options.scales && liveStockChart.options.scales.y && liveStockChart.options.scales.y.title) {
       liveStockChart.options.scales.y.title.text = 'Quantity in Stock';
     }
   } else {
-    const recentLogs = [...logsData].reverse().slice(-14);
+    // Movement history: only include Office Supplies type transactions
+    const recentLogs = [...logsData]
+      .filter(l => {
+        const item = inventoryData[encodeDbKey(l.itemName)];
+        if (item) return getCategoryType(item.category) === 'Office Supplies';
+        return true;
+      })
+      .reverse()
+      .slice(-14);
+
     if (recentLogs.length === 0) {
       liveStockChart.data.labels = ['No Data'];
       liveStockChart.data.datasets[0].data = [0];
-      liveStockChart.data.datasets[0].label = 'No Transactions Yet';
+      liveStockChart.data.datasets[0].label = 'No Supplies Transactions Yet';
     } else {
       liveStockChart.data.labels = recentLogs.map(l => {
         const d = new Date(l.date);
@@ -1399,11 +1718,134 @@ function renderStockChart() {
   liveStockChart.update();
 }
 
+function renderHomeListTable(items, showStatus = true, listTitle = '', listIcon = 'package', emptyMessage = 'No items found') {
+  if (items.length === 0) {
+    return `
+      <div class="p-6 text-center text-slate-500 rounded-xl border border-slate-200/70 bg-white/30 backdrop-blur-sm mb-4">
+        <i data-lucide="package-open" class="w-7 h-7 text-slate-400 mx-auto mb-1.5"></i>
+        <span class="text-xs font-medium block">${emptyMessage}</span>
+      </div>
+    `;
+  }
+
+  // Group items by category
+  const groups = {};
+  items.forEach(item => {
+    const cat = item.category || 'General';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(item);
+  });
+
+  // Sort inside each category by recent entry (lastUpdated descending)
+  for (const cat in groups) {
+    groups[cat].sort((a, b) => {
+      const timeA = a.lastUpdated ? new Date(a.lastUpdated).getTime() : 0;
+      const timeB = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+      return timeB - timeA;
+    });
+  }
+
+  let html = '';
+  if (listTitle) {
+    html += `
+      <div class="flex items-center justify-between mb-2 mt-4 px-1">
+        <div class="flex items-center gap-2">
+          <i data-lucide="${listIcon}" class="w-4 h-4 text-[#003865]"></i>
+          <h3 class="text-xs font-bold text-[#003865] uppercase tracking-wider">${escapeHtml(listTitle)}</h3>
+        </div>
+        <span class="text-[11px] font-semibold text-slate-500">${items.length} items</span>
+      </div>
+    `;
+  }
+
+  html += `
+    <div class="home-items-table-wrapper overflow-x-auto rounded-xl border border-slate-200/80 bg-white/40 backdrop-blur-sm mb-4">
+      <table class="home-items-table w-full text-left text-xs border-collapse">
+        <thead>
+          <tr class="bg-slate-100/90 text-slate-700 font-semibold border-b border-slate-200">
+            <th class="py-2.5 px-3">Item Name</th>
+            ${showStatus ? '<th class="py-2.5 px-3 text-center">Status</th>' : ''}
+            <th class="py-2.5 px-3 text-right">${showStatus ? 'Available Quantity' : 'Quantity'}</th>
+            <th class="py-2.5 px-3 text-center">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100/80">
+  `;
+
+  for (const [catName, catItems] of Object.entries(groups)) {
+    // Category Subheader row
+    html += `
+      <tr class="bg-slate-50/90 border-t border-b border-slate-200/60">
+        <td colspan="${showStatus ? 4 : 3}" class="py-1.5 px-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5 font-bold text-[11px] text-[#003865]">
+              <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+              <span>${escapeHtml(catName)}</span>
+            </div>
+            <span class="text-[10px] text-slate-500 font-medium">${catItems.length} item${catItems.length > 1 ? 's' : ''} &bull; Recent entry sorted</span>
+          </div>
+        </td>
+      </tr>
+    `;
+
+    catItems.forEach(item => {
+      const qty = Number(item.quantity) || 0;
+      const isZero = qty === 0;
+      const isLow = qty > 0 && qty <= 5;
+
+      let statusBadge = '';
+      if (showStatus) {
+        if (isZero) {
+          statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Out of Stock</span>';
+        } else if (isLow) {
+          statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Low Stock</span>';
+        } else {
+          statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>In Stock</span>';
+        }
+      }
+
+      html += `
+        <tr class="hover:bg-slate-50/70 transition-colors">
+          <td class="py-2.5 px-3">
+            <div class="font-bold text-slate-900 text-xs">${escapeHtml(item.name)}</div>
+          </td>
+          ${showStatus ? `<td class="py-2.5 px-3 text-center">${statusBadge}</td>` : ''}
+          <td class="py-2.5 px-3 text-right">
+            <span class="font-extrabold text-sm ${showStatus && isZero ? 'text-red-600' : 'text-[#003865]'}">
+              ${qty}
+              <span class="font-normal text-xs text-slate-500">${escapeHtml(item.unit || 'pcs')}</span>
+            </span>
+          </td>
+          <td class="py-2.5 px-3 text-center">
+            <div class="flex items-center justify-center gap-1">
+              <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-2 rounded-lg flex items-center gap-1" onclick="quickRestockItem('${encodeDbKey(item.name)}')" title="Add or Deduct Stock">
+                <i data-lucide="plus-circle" class="w-3 h-3 text-emerald-600"></i>
+                <span>Stock</span>
+              </button>
+              <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-1.5 rounded-lg text-slate-600" onclick="openItemHistory('${encodeDbKey(item.name)}')" title="View History">
+                <i data-lucide="history" class="w-3 h-3"></i>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+  }
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  return html;
+}
+
 function renderHomeItemsList() {
-  const tableBody = document.getElementById('homeItemsTableBody');
+  const container = document.getElementById('homeListsContainer');
   const countBadge = document.getElementById('homeItemsCountBadge');
   const searchInput = document.getElementById('homeItemSearchInput');
-  if (!tableBody) return;
+  if (!container) return;
 
   const filter = searchInput ? searchInput.value.toLowerCase().trim() : '';
   const allItems = Object.values(inventoryData);
@@ -1420,97 +1862,88 @@ function renderHomeItemsList() {
     );
   });
 
-  filtered.sort((a, b) => a.name.localeCompare(b.name));
+  const officeSuppliesItems = filtered.filter(i => getCategoryType(i.category) === 'Office Supplies');
+  const equipmentItems = filtered.filter(i => getCategoryType(i.category) === 'Equipments');
+
+  if (homeOfficeCountBadge) homeOfficeCountBadge.textContent = officeSuppliesItems.length;
+  if (homeEquipmentCountBadge) homeEquipmentCountBadge.textContent = equipmentItems.length;
 
   if (countBadge) {
-    countBadge.textContent = `${filtered.length} ${filtered.length === 1 ? 'item' : 'items'}`;
-  }
-
-  if (filtered.length === 0) {
-    tableBody.innerHTML = `
-      <tr>
-        <td colspan="6" class="text-center py-8 text-slate-500">
-          <div class="flex flex-col items-center justify-center gap-1.5">
-            <i data-lucide="package-open" class="w-7 h-7 text-slate-400"></i>
-            <span class="text-xs font-medium">${filter ? 'No items match your search filter.' : 'No inventory items recorded yet.'}</span>
-          </div>
-        </td>
-      </tr>
-    `;
-    refreshIcons();
-    return;
-  }
-
-  tableBody.innerHTML = filtered.map(item => {
-    const qty = Number(item.quantity) || 0;
-    const isZero = qty === 0;
-    const isLow = qty > 0 && qty <= 5;
-
-    let statusBadge = '';
-    if (isZero) {
-      statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700 border border-red-200"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Out of Stock</span>';
-    } else if (isLow) {
-      statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Low Stock</span>';
+    if (currentHomeTypeTab === 'Office Supplies') {
+      countBadge.textContent = `${officeSuppliesItems.length} office item${officeSuppliesItems.length === 1 ? '' : 's'}`;
+    } else if (currentHomeTypeTab === 'Equipments') {
+      countBadge.textContent = `${equipmentItems.length} equipment item${equipmentItems.length === 1 ? '' : 's'}`;
     } else {
-      statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>In Stock</span>';
+      countBadge.textContent = `${filtered.length} total items`;
     }
+  }
 
-    const tags = [];
-    if (item.propertyNo) {
-      tags.push(`<span class="inline-flex items-center gap-1 font-mono text-[10px] font-bold bg-sky-50 text-[#003865] px-1.5 py-0.5 rounded border border-sky-200" title="Property No."><i data-lucide="file-badge" class="w-3 h-3 text-[#003865]"></i>#${escapeHtml(item.propertyNo)}</span>`);
-    }
-    if (item.serialNo) {
-      tags.push(`<span class="inline-flex items-center gap-1 font-mono text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200" title="Serial No."><i data-lucide="barcode" class="w-3 h-3 text-slate-500"></i>SN: ${escapeHtml(item.serialNo)}</span>`);
-    }
-    if (item.year) {
-      tags.push(`<span class="inline-flex items-center gap-1 text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-medium" title="Year"><i data-lucide="calendar" class="w-3 h-3 text-amber-600"></i>${escapeHtml(item.year)}</span>`);
-    }
-    if (item.condition) {
-      tags.push(`<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded ${item.condition === 'R' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}" title="Condition Grade">${escapeHtml(item.condition)}</span>`);
-    }
+  let html = '';
 
-    const tagsHtml = tags.length > 0 ? `<div class="flex flex-wrap items-center gap-1">${tags.join('')}</div>` : '<span class="text-slate-400 text-[11px] italic">Standard Item</span>';
-
-    return `
-      <tr class="hover:bg-slate-50/70 transition-colors">
-        <td class="py-2.5 px-3">
-          <div class="font-bold text-slate-900 text-xs">${escapeHtml(item.name)}</div>
-          ${item.owner ? `<div class="text-[11px] text-slate-500">Custodian: <strong class="text-slate-700">${escapeHtml(item.owner)}</strong></div>` : ''}
-        </td>
-        <td class="py-2.5 px-3">
-          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100/90 text-slate-700 text-[11px] font-medium border border-slate-200/60">
-            <i data-lucide="tag" class="w-3 h-3 text-slate-400"></i>
-            ${escapeHtml(item.category)}
-          </span>
-        </td>
-        <td class="py-2.5 px-3">
-          ${tagsHtml}
-        </td>
-        <td class="py-2.5 px-3 text-center">
-          ${statusBadge}
-        </td>
-        <td class="py-2.5 px-3 text-right">
-          <span class="font-extrabold text-sm ${isZero ? 'text-red-600' : 'text-[#003865]'}">
-            ${qty}
-            <span class="font-normal text-xs text-slate-500">${escapeHtml(item.unit || 'pcs')}</span>
-          </span>
-        </td>
-        <td class="py-2.5 px-3 text-center">
-          <div class="flex items-center justify-center gap-1">
-            <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-2 rounded-lg flex items-center gap-1" onclick="quickRestockItem('${encodeDbKey(item.name)}')" title="Add or Deduct Stock">
-              <i data-lucide="plus-circle" class="w-3 h-3 text-emerald-600"></i>
-              <span>Stock</span>
-            </button>
-            <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-1.5 rounded-lg text-slate-600" onclick="openItemHistory('${encodeDbKey(item.name)}')" title="View History">
-              <i data-lucide="history" class="w-3 h-3"></i>
-            </button>
-          </div>
-        </td>
-      </tr>
+  if (currentHomeTypeTab === 'Office Supplies') {
+    html = renderHomeListTable(
+      officeSuppliesItems,
+      true, // Show Status badges for Office Supplies
+      '',
+      'package',
+      filter ? 'No office supplies match your search filter.' : 'No office supplies items recorded yet.'
+    );
+  } else if (currentHomeTypeTab === 'Equipments') {
+    html = renderHomeListTable(
+      equipmentItems,
+      false, // NO status for Equipments as requested
+      '',
+      'wrench',
+      filter ? 'No equipment items match your search filter.' : 'No equipment items recorded yet.'
+    );
+  } else {
+    // Both lists view
+    html = `
+      ${renderHomeListTable(
+        officeSuppliesItems,
+        true,
+        'Office Supplies List (With Live Status)',
+        'package',
+        filter ? 'No office supplies match search.' : 'No office supplies recorded.'
+      )}
+      ${renderHomeListTable(
+        equipmentItems,
+        false,
+        'Equipments List (No Status)',
+        'wrench',
+        filter ? 'No equipments match search.' : 'No equipments recorded.'
+      )}
     `;
-  }).join('');
+  }
 
+  container.innerHTML = html;
   refreshIcons();
+}
+
+// Wire Home 2-List Tab Buttons
+if (homeTabOfficeSupplies && homeTabEquipments && homeTabBoth) {
+  const switchHomeTab = (tab) => {
+    currentHomeTypeTab = tab;
+    [homeTabOfficeSupplies, homeTabEquipments, homeTabBoth].forEach(btn => {
+      btn.classList.remove('active', 'bg-[#003865]', 'text-white', 'shadow-sm');
+      btn.classList.add('text-slate-700');
+    });
+    if (tab === 'Office Supplies') {
+      homeTabOfficeSupplies.classList.add('active', 'bg-[#003865]', 'text-white', 'shadow-sm');
+      homeTabOfficeSupplies.classList.remove('text-slate-700');
+    } else if (tab === 'Equipments') {
+      homeTabEquipments.classList.add('active', 'bg-[#003865]', 'text-white', 'shadow-sm');
+      homeTabEquipments.classList.remove('text-slate-700');
+    } else {
+      homeTabBoth.classList.add('active', 'bg-[#003865]', 'text-white', 'shadow-sm');
+      homeTabBoth.classList.remove('text-slate-700');
+    }
+    renderHomeItemsList();
+  };
+
+  homeTabOfficeSupplies.addEventListener('click', () => switchHomeTab('Office Supplies'));
+  homeTabEquipments.addEventListener('click', () => switchHomeTab('Equipments'));
+  homeTabBoth.addEventListener('click', () => switchHomeTab('Both'));
 }
 
 if (homeItemSearchInput) {
@@ -1522,8 +1955,10 @@ function updateDashboard() {
   renderHomeItemsList();
 
   const items = Object.values(inventoryData);
-  const outOfStock = items.filter(i => (Number(i.quantity) || 0) === 0);
-  const lowStock = items.filter(i => (Number(i.quantity) || 0) > 0 && (Number(i.quantity) || 0) <= 5);
+  // User requirement: Equipments will NOT appear in low or restock
+  const officeItems = items.filter(i => getCategoryType(i.category) === 'Office Supplies');
+  const outOfStock = officeItems.filter(i => (Number(i.quantity) || 0) === 0);
+  const lowStock = officeItems.filter(i => (Number(i.quantity) || 0) > 0 && (Number(i.quantity) || 0) <= 5);
   const attentionItems = [...outOfStock, ...lowStock];
 
   const attentionListEl = document.getElementById('homeAttentionList');
@@ -1532,7 +1967,7 @@ function updateDashboard() {
 
   if (attentionListEl) {
     if (attentionItems.length === 0) {
-      attentionListEl.innerHTML = '<p class="empty-state-text"><i data-lucide="check-check" class="w-4 h-4 text-emerald-500 inline mr-1"></i> All items are sufficiently stocked.</p>';
+      attentionListEl.innerHTML = '<p class="empty-state-text"><i data-lucide="check-check" class="w-4 h-4 text-emerald-500 inline mr-1"></i> All office supplies are sufficiently stocked.</p>';
     } else {
       attentionListEl.innerHTML = attentionItems.map(item => `
         <div class="attention-item">
@@ -1976,15 +2411,29 @@ function renderInventory() {
               </div>
             ` : ''}
 
-            <!-- Metadata: Price (Optional) -->
+            <!-- Metadata: Price & Value Classification -->
             ${(item.price !== undefined && item.price !== null && item.price !== '') ? `
-              <div class="flex items-center gap-1.5 mb-1.5">
+              <div class="flex items-center flex-wrap gap-1.5 mb-1.5">
                 <span class="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-200 font-semibold" title="Item Price">
                   <i data-lucide="badge-dollar-sign" class="w-3 h-3 text-emerald-700"></i>
                   <span>₱${Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </span>
+                ${(() => {
+                  const valLabel = getItemValueLabel(item);
+                  if (!valLabel) return '';
+                  const isHigh = valLabel.toLowerCase().includes('high');
+                  return `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border ${isHigh ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-blue-100 text-blue-900 border-blue-300'}" title="Value Classification"><i data-lucide="${isHigh ? 'trending-up' : 'trending-down'}" class="w-3 h-3"></i>${escapeHtml(valLabel)}</span>`;
+                })()}
               </div>
-            ` : ''}
+            ` : (getItemValueLabel(item) ? `
+              <div class="flex items-center gap-1.5 mb-1.5">
+                ${(() => {
+                  const valLabel = getItemValueLabel(item);
+                  const isHigh = valLabel.toLowerCase().includes('high');
+                  return `<span class="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded border ${isHigh ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-blue-100 text-blue-900 border-blue-300'}" title="Value Classification"><i data-lucide="${isHigh ? 'trending-up' : 'trending-down'}" class="w-3 h-3"></i>${escapeHtml(valLabel)}</span>`;
+                })()}
+              </div>
+            ` : '')}
 
             <!-- Metadata: Remarks / Note (Optional) -->
             ${item.remarks ? `
@@ -2015,6 +2464,9 @@ function renderInventory() {
               </button>
               <button type="button" class="btn-card-action" onclick="openQuickAdjustment('${encodeDbKey(item.key)}')" title="Record Stock Adjustment">
                 <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+              </button>
+              <button type="button" class="btn-card-action text-red-600 hover:text-red-700 hover:bg-red-50" onclick="removeSingleDatabaseItem('${encodeDbKey(item.key)}', '${escapeHtml(item.name)}')" title="Remove Item from Database">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
               </button>
             </div>
           </div>
@@ -2074,6 +2526,16 @@ function updateDatabaseSelectionUI() {
     }
   }
 
+  // User requirement: When an item is selected, show red remove button with trash icon in database nav
+  if (dbRemoveSelectedBtn) {
+    if (selectedExportItemKeys.size > 0) {
+      dbRemoveSelectedBtn.classList.remove('hidden');
+      if (dbRemoveCountBadge) dbRemoveCountBadge.textContent = selectedExportItemKeys.size;
+    } else {
+      dbRemoveSelectedBtn.classList.add('hidden');
+    }
+  }
+
   if (dbSelectAllCheck) {
     if (allFilteredCheckboxes.length > 0 && checkedBoxes.length === allFilteredCheckboxes.length) {
       dbSelectAllCheck.checked = true;
@@ -2086,6 +2548,89 @@ function updateDatabaseSelectionUI() {
       dbSelectAllCheck.indeterminate = false;
     }
   }
+}
+
+window.removeSingleDatabaseItem = function(key, name) {
+  openConfirmDialog({
+    title: 'Remove Item from Database',
+    message: `Are you sure you want to permanently remove "${name}" from the database?`,
+    detailsHtml: `
+      <div class="confirm-detail-row">
+        <span class="confirm-detail-label">Item Name:</span>
+        <span class="confirm-detail-value font-bold text-slate-900">${escapeHtml(name)}</span>
+      </div>
+      <p class="text-[11px] text-red-700 mt-2"><strong>Warning:</strong> This item and its inventory records will be permanently deleted.</p>
+    `,
+    confirmText: 'Yes, Remove Item',
+    confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700 shadow-sm',
+    iconTheme: 'danger',
+    onConfirm: async () => {
+      await db.ref(`inventory/${key}`).remove();
+
+      // Log transaction
+      db.ref('activity_logs').push({
+        action: 'DELETE',
+        itemName: name,
+        changeQty: 1,
+        oldQty: '-',
+        newQty: 0,
+        user: 'Administrator',
+        date: new Date().toISOString(),
+        note: `Deleted item "${name}" from database`
+      });
+
+      selectedExportItemKeys.delete(name);
+      refreshAllViews();
+      showToast(`Item "${name}" removed from database`, 'warning', 'Item Removed');
+    }
+  });
+};
+
+if (dbRemoveSelectedBtn) {
+  dbRemoveSelectedBtn.addEventListener('click', () => {
+    if (selectedExportItemKeys.size === 0) return;
+    const count = selectedExportItemKeys.size;
+    const namesList = Array.from(selectedExportItemKeys);
+
+    openConfirmDialog({
+      title: 'Remove Selected Items',
+      message: `Are you sure you want to permanently remove ${count} selected item(s) from the database?`,
+      detailsHtml: `
+        <div class="confirm-detail-row">
+          <span class="confirm-detail-label">Selected Count:</span>
+          <span class="confirm-detail-value font-bold text-red-600">${count} item(s)</span>
+        </div>
+        <p class="text-[11px] text-red-700 mt-2"><strong>Warning:</strong> The selected items will be permanently removed from the database.</p>
+      `,
+      confirmText: 'Yes, Remove Selected',
+      confirmBtnClass: 'btn-primary bg-red-600 hover:bg-red-700 shadow-sm',
+      iconTheme: 'danger',
+      onConfirm: async () => {
+        const updates = {};
+        namesList.forEach(name => {
+          const key = encodeDbKey(name);
+          updates[`inventory/${key}`] = null;
+        });
+
+        await db.ref().update(updates);
+
+        db.ref('activity_logs').push({
+          action: 'DELETE',
+          itemName: `${count} selected items`,
+          changeQty: count,
+          oldQty: '-',
+          newQty: '-',
+          user: 'Administrator',
+          date: new Date().toISOString(),
+          note: `Batch removed ${count} items from database`
+        });
+
+        selectedExportItemKeys.clear();
+        refreshAllViews();
+        showToast(`Removed ${count} items from database`, 'warning', 'Items Deleted');
+      }
+    });
+  });
 }
 
 function getExportDataset() {
@@ -2180,13 +2725,14 @@ function renderExportPreview() {
     return;
   }
 
-  // Exact 8-column preview layout matching user specification:
-  // Quantity | UNIT | DESCRIPTION(ITEM) | Property NO. | SERIAL NO. | YEAR | PRICE | REMARK
+  // Exact 9-column preview layout matching specification with VALUE classification:
+  // Quantity | UNIT | DESCRIPTION(ITEM) | Property NO. | SERIAL NO. | YEAR | PRICE | VALUE | REMARK
   tbody.innerHTML = dataset.map((item, idx) => {
     const isSelected = selectedExportItemKeys.has(item.name);
     const priceDisplay = (item.price !== undefined && item.price !== null && item.price !== '')
       ? `₱${Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : '—';
+    const valueLabel = getItemValueLabel(item);
 
     return `
       <tr class="hover:bg-blue-50/50 transition-colors ${isSelected ? 'bg-sky-50/40' : ''}">
@@ -2214,6 +2760,9 @@ function renderExportPreview() {
         </td>
         <td class="py-2 px-3 border-r border-slate-200/80 text-right font-mono font-semibold text-emerald-800 text-xs">
           ${priceDisplay}
+        </td>
+        <td class="py-2 px-3 border-r border-slate-200/80 text-center">
+          ${valueLabel ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-bold ${valueLabel.toLowerCase().includes('high') ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-blue-100 text-blue-800 border-blue-200'} border">${escapeHtml(valueLabel)}</span>` : '<span class="text-slate-400 font-mono text-xs">—</span>'}
         </td>
         <td class="py-2 px-3 text-slate-600 italic text-[11px]">
           ${item.remarks ? escapeHtml(item.remarks) : '—'}
@@ -2251,8 +2800,8 @@ function downloadExcelFile() {
     return;
   }
 
-  // Exact 8-column construct requested by user:
-  // Quantity | UNIT | DESCRIPTION(ITEM) | Property NO. | SERIAL NO. | YEAR | PRICE | REMARK
+  // Exact 9-column construct with VALUE column:
+  // Quantity | UNIT | DESCRIPTION(ITEM) | Property NO. | SERIAL NO. | YEAR | PRICE | VALUE | REMARK
   const headers = [
     'Quantity',
     'UNIT',
@@ -2261,6 +2810,7 @@ function downloadExcelFile() {
     'SERIAL NO.',
     'YEAR',
     'PRICE',
+    'VALUE',
     'REMARK'
   ];
 
@@ -2272,6 +2822,7 @@ function downloadExcelFile() {
     item.serialNo || '',
     item.year ? String(item.year) : '',
     item.price !== undefined && item.price !== null && item.price !== '' ? Number(item.price) : '',
+    getItemValueLabel(item) || '',
     item.remarks || ''
   ]);
 
@@ -2289,6 +2840,7 @@ function downloadExcelFile() {
       { wch: 22 }, // SERIAL NO.
       { wch: 12 }, // YEAR
       { wch: 15 }, // PRICE
+      { wch: 18 }, // VALUE
       { wch: 32 }  // REMARK
     ];
 
@@ -2324,6 +2876,7 @@ function downloadCsvFile() {
     'SERIAL NO.',
     'YEAR',
     'PRICE',
+    'VALUE',
     'REMARK'
   ];
 
@@ -2341,6 +2894,7 @@ function downloadCsvFile() {
     escapeCsv(item.serialNo || ''),
     escapeCsv(item.year || ''),
     item.price !== undefined && item.price !== null && item.price !== '' ? Number(item.price).toFixed(2) : '',
+    escapeCsv(getItemValueLabel(item) || ''),
     escapeCsv(item.remarks || '')
   ].join(','));
 
@@ -2549,8 +3103,10 @@ if (dbResetFiltersBtn) {
 function updateStats() {
   const items = Object.values(inventoryData);
   const total = items.length;
-  const inStock = items.filter(i => (Number(i.quantity) || 0) > 0).length;
-  const outOfStock = items.filter(i => (Number(i.quantity) || 0) === 0).length;
+  // User requirement: Equipments will NOT appear in low or restock
+  const officeItems = items.filter(i => getCategoryType(i.category) === 'Office Supplies');
+  const inStock = officeItems.filter(i => (Number(i.quantity) || 0) > 0).length;
+  const outOfStock = officeItems.filter(i => (Number(i.quantity) || 0) === 0).length;
   const totalVolume = items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
 
   const elTotal = document.getElementById('statTotalItems');
