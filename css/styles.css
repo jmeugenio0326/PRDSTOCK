@@ -22,6 +22,7 @@
   --text-muted: #526175;
   --border: rgba(203, 213, 225, 0.7);
   --dock-height: 68px;
+  --header-height: 58px;
 }
 
 *, *::before, *::after {
@@ -573,20 +574,25 @@ html, body {
    6. APP HEADER
    ==================================================== */
 .app-header {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 40;
-  background: rgba(0, 42, 77, 0.85);
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: var(--header-height);
+  z-index: 50;
+  background: rgba(0, 42, 77, 0.92);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   color: #fff;
-  padding: 0.75rem clamp(0.75rem, 3vw, 1.35rem);
+  padding: 0 clamp(0.75rem, 3vw, 1.35rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 20px rgba(0, 20, 45, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 20px rgba(0, 20, 45, 0.18);
   gap: 0.5rem;
+  box-sizing: border-box;
 }
 .header-brand {
   display: flex;
@@ -684,6 +690,7 @@ html, body {
   max-width: 1140px;
   margin: 0 auto;
   padding: clamp(0.85rem, 2.5vw, 1.35rem);
+  padding-top: calc(var(--header-height) + clamp(0.85rem, 2.5vw, 1.35rem));
   padding-bottom: calc(var(--dock-height) + 1.8rem);
   box-sizing: border-box;
 }
