@@ -1818,6 +1818,9 @@ function renderHomeListTable(items, showStatus = true, listTitle = '', listIcon 
           </td>
           <td class="py-2.5 px-3 text-center">
             <div class="flex items-center justify-center gap-1">
+              <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-1.5 rounded-lg text-[#003865]" onclick="openItemGraph('${encodeDbKey(item.name)}')" title="View Stock Graph">
+                <i data-lucide="line-chart" class="w-3 h-3"></i>
+              </button>
               <button type="button" class="btn btn-secondary glass-btn text-[11px] py-1 px-2 rounded-lg flex items-center gap-1" onclick="quickRestockItem('${encodeDbKey(item.name)}')" title="Add or Deduct Stock">
                 <i data-lucide="plus-circle" class="w-3 h-3 text-emerald-600"></i>
                 <span>Stock</span>
@@ -2459,6 +2462,9 @@ function renderInventory() {
               </span>
             </div>
             <div class="flex items-center gap-1.5">
+              <button type="button" class="btn-card-action text-[#003865] hover:text-[#005a9e] hover:bg-blue-50" onclick="openItemGraph('${encodeDbKey(item.key)}')" title="View Stock IN/OUT Graph">
+                <i data-lucide="line-chart" class="w-3.5 h-3.5"></i>
+              </button>
               <button type="button" class="btn-card-action" onclick="openItemHistory('${encodeDbKey(item.key)}')" title="View Stock Movement History">
                 <i data-lucide="history" class="w-3.5 h-3.5"></i>
               </button>
@@ -3085,6 +3091,351 @@ window.openItemHistory = function(itemKey) {
     refreshIcons();
   });
 };
+
+// ==========================================
+// 10.1 ITEM STOCK IN/OUT GRAPH MODAL
+// ==========================================
+let itemStockMovementChart = null;
+let currentItemGraphMode = 'inout'; // 'inout' or 'balance'
+let currentGraphItemKey = null;
+let currentGraphItemData = null;
+let currentGraphItemLogs = [];
+
+const itemGraphModal = document.getElementById('itemGraphModal');
+const closeItemGraphModalBtn = document.getElementById('closeItemGraphModalBtn');
+const closeItemGraphBtn = document.getElementById('closeItemGraphBtn');
+const btnGraphModeInOut = document.getElementById('btnGraphModeInOut');
+const btnGraphModeBalance = document.getElementById('btnGraphModeBalance');
+const itemGraphOpenHistoryBtn = document.getElementById('itemGraphOpenHistoryBtn');
+
+function closeItemGraphModal() {
+  if (itemGraphModal) itemGraphModal.classList.add('hidden');
+}
+
+if (closeItemGraphModalBtn) closeItemGraphModalBtn.addEventListener('click', closeItemGraphModal);
+if (closeItemGraphBtn) closeItemGraphBtn.addEventListener('click', closeItemGraphModal);
+
+if (itemGraphOpenHistoryBtn) {
+  itemGraphOpenHistoryBtn.addEventListener('click', () => {
+    closeItemGraphModal();
+    if (currentGraphItemKey) {
+      openItemHistory(currentGraphItemKey);
+    }
+  });
+}
+
+if (btnGraphModeInOut && btnGraphModeBalance) {
+  btnGraphModeInOut.addEventListener('click', () => {
+    currentItemGraphMode = 'inout';
+    btnGraphModeInOut.classList.add('active');
+    btnGraphModeBalance.classList.remove('active');
+    const headerEl = document.getElementById('itemGraphModeHeader');
+    if (headerEl) headerEl.textContent = 'Stock IN & OUT by Date';
+    if (currentGraphItemData) {
+      renderItemMovementChart(currentGraphItemData, currentGraphItemLogs);
+    }
+  });
+
+  btnGraphModeBalance.addEventListener('click', () => {
+    currentItemGraphMode = 'balance';
+    btnGraphModeBalance.classList.add('active');
+    btnGraphModeInOut.classList.remove('active');
+    const headerEl = document.getElementById('itemGraphModeHeader');
+    if (headerEl) headerEl.textContent = 'Stock Balance Trend';
+    if (currentGraphItemData) {
+      renderItemMovementChart(currentGraphItemData, currentGraphItemLogs);
+    }
+  });
+}
+
+window.openItemGraph = function(itemKey) {
+  currentGraphItemKey = itemKey;
+  const item = inventoryData[itemKey];
+  if (!item) return;
+  currentGraphItemData = item;
+
+  const titleEl = document.getElementById('itemGraphModalTitle');
+  const subtitleEl = document.getElementById('itemGraphModalSubtitle');
+  const balEl = document.getElementById('graphItemCurrentBal');
+  const inEl = document.getElementById('graphItemTotalIn');
+  const outEl = document.getElementById('graphItemTotalOut');
+  const txEl = document.getElementById('graphItemTxCount');
+
+  if (titleEl) titleEl.textContent = `${item.name}`;
+  if (subtitleEl) subtitleEl.textContent = `${item.category || 'General'} • Available Stock: ${item.quantity} ${item.unit || 'pcs'}`;
+  if (balEl) balEl.textContent = `${item.quantity} ${item.unit || 'pcs'}`;
+
+  // Default to IN & OUT mode
+  currentItemGraphMode = 'inout';
+  if (btnGraphModeInOut) btnGraphModeInOut.classList.add('active');
+  if (btnGraphModeBalance) btnGraphModeBalance.classList.remove('active');
+  const headerEl = document.getElementById('itemGraphModeHeader');
+  if (headerEl) headerEl.textContent = 'Stock IN & OUT by Date';
+
+  if (itemGraphModal) itemGraphModal.classList.remove('hidden');
+  refreshIcons();
+
+  // Fetch logs
+  db.ref(`inventory/${itemKey}/logs`).once('value', (snap) => {
+    let logs = [];
+    snap.forEach(c => logs.push(c.val()));
+
+    // Fallback: check global logsData matching item name
+    if (logs.length === 0 && Array.isArray(logsData)) {
+      logs = logsData.filter(l => l.itemName && l.itemName.toLowerCase() === item.name.toLowerCase());
+    }
+
+    // Sort chronologically ascending for the time-series graph
+    logs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    currentGraphItemLogs = logs;
+
+    let totalIn = 0;
+    let totalOut = 0;
+    logs.forEach(l => {
+      const q = Number(l.qtyChanged) || 0;
+      if (l.action === 'IN') totalIn += q;
+      else if (l.action === 'OUT') totalOut += q;
+    });
+
+    if (inEl) inEl.textContent = `+${totalIn} ${item.unit || 'pcs'}`;
+    if (outEl) outEl.textContent = `-${totalOut} ${item.unit || 'pcs'}`;
+    if (txEl) txEl.textContent = `${logs.length}`;
+
+    renderItemMovementChart(item, logs);
+  });
+};
+
+function renderItemMovementChart(item, logs) {
+  const canvas = document.getElementById('itemStockMovementChart');
+  const emptyMsg = document.getElementById('itemGraphEmptyMsg');
+  if (!canvas) return;
+
+  if (itemStockMovementChart) {
+    itemStockMovementChart.destroy();
+    itemStockMovementChart = null;
+  }
+
+  if (!logs || logs.length === 0) {
+    if (emptyMsg) emptyMsg.classList.remove('hidden');
+
+    const ctx = canvas.getContext('2d');
+    const gradBal = ctx.createLinearGradient(0, 0, 0, 260);
+    gradBal.addColorStop(0, 'rgba(0, 56, 101, 0.42)');
+    gradBal.addColorStop(0.5, 'rgba(15, 118, 110, 0.20)');
+    gradBal.addColorStop(1, 'rgba(15, 118, 110, 0.02)');
+
+    const currentDateLabel = item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Current';
+
+    itemStockMovementChart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: [currentDateLabel],
+        datasets: [{
+          label: 'Current Quantity in Stock',
+          data: [Number(item.quantity) || 0],
+          borderColor: '#003865',
+          borderWidth: 3,
+          pointBackgroundColor: '#0f766e',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2.5,
+          pointRadius: 6,
+          backgroundColor: gradBal,
+          fill: true,
+          tension: 0.35
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false }
+        },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, grid: { color: 'rgba(203, 213, 225, 0.5)' } }
+        }
+      }
+    });
+    return;
+  }
+
+  if (emptyMsg) emptyMsg.classList.add('hidden');
+
+  const ctx = canvas.getContext('2d');
+
+  // Linear gradients identical to the Home graph design
+  const gradIn = ctx.createLinearGradient(0, 0, 0, 260);
+  gradIn.addColorStop(0, 'rgba(16, 185, 129, 0.45)');
+  gradIn.addColorStop(0.5, 'rgba(16, 185, 129, 0.18)');
+  gradIn.addColorStop(1, 'rgba(16, 185, 129, 0.02)');
+
+  const gradOut = ctx.createLinearGradient(0, 0, 0, 260);
+  gradOut.addColorStop(0, 'rgba(239, 68, 68, 0.42)');
+  gradOut.addColorStop(0.5, 'rgba(239, 68, 68, 0.16)');
+  gradOut.addColorStop(1, 'rgba(239, 68, 68, 0.02)');
+
+  const gradBal = ctx.createLinearGradient(0, 0, 0, 260);
+  gradBal.addColorStop(0, 'rgba(0, 56, 101, 0.45)');
+  gradBal.addColorStop(0.5, 'rgba(15, 118, 110, 0.20)');
+  gradBal.addColorStop(1, 'rgba(15, 118, 110, 0.02)');
+
+  // Formatted date labels for X-axis
+  const labels = logs.map(l => {
+    const d = new Date(l.date);
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const hours = d.getHours();
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${m}/${day} ${hours}:${mins}`;
+  });
+
+  let datasets = [];
+
+  if (currentItemGraphMode === 'inout') {
+    const dataIn = logs.map(l => l.action === 'IN' ? (Number(l.qtyChanged) || 0) : 0);
+    const dataOut = logs.map(l => l.action === 'OUT' ? (Number(l.qtyChanged) || 0) : 0);
+
+    datasets = [
+      {
+        label: `Stock IN (Added ${item.unit || 'pcs'})`,
+        data: dataIn,
+        borderColor: '#059669', // Emerald
+        borderWidth: 3,
+        pointBackgroundColor: '#059669',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2.5,
+        pointRadius: 6,
+        pointHoverRadius: 9,
+        backgroundColor: gradIn,
+        fill: true,
+        tension: 0.35
+      },
+      {
+        label: `Stock OUT (Issued ${item.unit || 'pcs'})`,
+        data: dataOut,
+        borderColor: '#dc2626', // Red
+        borderWidth: 3,
+        pointBackgroundColor: '#dc2626',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2.5,
+        pointRadius: 6,
+        pointHoverRadius: 9,
+        backgroundColor: gradOut,
+        fill: true,
+        tension: 0.35
+      }
+    ];
+  } else {
+    const dataBal = logs.map(l => Number(l.newQty) || 0);
+
+    datasets = [
+      {
+        label: `Stock Balance Level (${item.unit || 'pcs'})`,
+        data: dataBal,
+        borderColor: '#003865',
+        borderWidth: 3,
+        pointBackgroundColor: '#0f766e',
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2.5,
+        pointRadius: 6,
+        pointHoverRadius: 9,
+        backgroundColor: gradBal,
+        fill: true,
+        tension: 0.35
+      }
+    ];
+  }
+
+  itemStockMovementChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 750,
+        easing: 'easeInOutQuart'
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            boxWidth: 12,
+            font: { family: 'Inter', size: 12, weight: '600' },
+            color: '#1e293b'
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(15, 23, 42, 0.94)',
+          titleFont: { family: 'Inter', size: 12, weight: '700' },
+          bodyFont: { family: 'Inter', size: 11 },
+          padding: 10,
+          cornerRadius: 8,
+          displayColors: true,
+          callbacks: {
+            title: function(context) {
+              const idx = context[0].dataIndex;
+              const log = logs[idx];
+              if (log && log.date) {
+                return new Date(log.date).toLocaleString(undefined, {
+                  month: 'short', day: 'numeric', year: 'numeric',
+                  hour: '2-digit', minute: '2-digit'
+                });
+              }
+              return context[0].label;
+            },
+            label: function(context) {
+              const idx = context.dataIndex;
+              const log = logs[idx];
+              const lines = [];
+              if (log) {
+                const actionLabel = log.action === 'IN' ? 'Stock Added (+)' : 'Stock Issued (-)';
+                lines.push(`Action: ${actionLabel} ${log.qtyChanged} ${item.unit || 'pcs'}`);
+                lines.push(`Balance after: ${log.newQty} ${item.unit || 'pcs'}`);
+                if (log.remarks) lines.push(`Note: ${log.remarks}`);
+              } else {
+                lines.push(`${context.dataset.label}: ${context.parsed.y}`);
+              }
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            font: { family: 'Inter', size: 10, weight: '600' },
+            color: '#334155',
+            maxRotation: 25,
+            minRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 8
+          }
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(203, 213, 225, 0.5)' },
+          ticks: {
+            font: { family: 'Inter', size: 11, weight: '500' },
+            color: '#64748b',
+            precision: 0
+          },
+          title: {
+            display: true,
+            text: currentItemGraphMode === 'inout' ? 'Units Transacted' : 'Stock Quantity',
+            font: { family: 'Inter', size: 11, weight: '600' },
+            color: '#64748b'
+          }
+        }
+      }
+    }
+  });
+}
 
 window.resetDbFilters = function() {
   dbSearchInput.value = '';

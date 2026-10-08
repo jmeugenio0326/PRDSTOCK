@@ -805,6 +805,87 @@
     </div>
   </div>
 
+  <!-- Item Stock IN/OUT Graph Modal -->
+  <div id="itemGraphModal" class="modal hidden">
+    <div class="modal-backdrop glass-backdrop"></div>
+    <div class="modal-content modal-lg glass-modal">
+      <div class="modal-header">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-[#003865]/10 border border-[#003865]/20 text-[#003865] flex items-center justify-center flex-shrink-0">
+            <i data-lucide="line-chart" class="w-5 h-5"></i>
+          </div>
+          <div class="min-w-0">
+            <h3 class="font-bold text-[#003865] text-base leading-tight truncate" id="itemGraphModalTitle">Item Stock Graph</h3>
+            <p class="text-xs text-slate-500 m-0 truncate" id="itemGraphModalSubtitle">Stock IN &amp; OUT History by Date</p>
+          </div>
+        </div>
+        <button class="modal-close" id="closeItemGraphModalBtn">&times;</button>
+      </div>
+      <div class="modal-body p-4">
+        <!-- Quick Metric Highlights Bar -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3.5">
+          <div class="p-2.5 rounded-xl bg-slate-50/90 border border-slate-200/80">
+            <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Current Balance</span>
+            <span class="text-base font-extrabold text-[#003865]" id="graphItemCurrentBal">0</span>
+          </div>
+          <div class="p-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200/80">
+            <div class="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>Total Stock IN</span>
+            </div>
+            <span class="text-base font-extrabold text-emerald-800" id="graphItemTotalIn">+0</span>
+          </div>
+          <div class="p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/80">
+            <div class="flex items-center gap-1 text-[10px] font-semibold text-amber-700 uppercase tracking-wider">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              <span>Total Stock OUT</span>
+            </div>
+            <span class="text-base font-extrabold text-amber-800" id="graphItemTotalOut">-0</span>
+          </div>
+          <div class="p-2.5 rounded-xl bg-blue-50/90 border border-blue-200/80">
+            <span class="text-[10px] font-semibold text-blue-700 uppercase tracking-wider block">Transactions</span>
+            <span class="text-base font-extrabold text-blue-800" id="graphItemTxCount">0</span>
+          </div>
+        </div>
+
+        <!-- Graph Controls & Mode Switcher (same design as home) -->
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2 px-1">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-[#003865] flex items-center gap-1">
+              <i data-lucide="trending-up" class="w-3.5 h-3.5 text-[#003865]"></i>
+              <span id="itemGraphModeHeader">Stock IN &amp; OUT by Date</span>
+            </span>
+          </div>
+          <div class="graph-mode-toggle glass-segmented flex items-center">
+            <button type="button" class="btn-graph-mode active text-xs py-1 px-2.5" id="btnGraphModeInOut">Stock IN &amp; OUT</button>
+            <button type="button" class="btn-graph-mode text-xs py-1 px-2.5" id="btnGraphModeBalance">Balance Trend</button>
+          </div>
+        </div>
+
+        <!-- Chart Container -->
+        <div class="chart-wrapper" style="height: 280px; margin-top: 0.5rem;">
+          <canvas id="itemStockMovementChart"></canvas>
+        </div>
+
+        <!-- Empty State Message -->
+        <div id="itemGraphEmptyMsg" class="hidden text-center py-6 text-slate-500">
+          <i data-lucide="package-open" class="w-9 h-9 text-slate-300 mx-auto mb-1.5"></i>
+          <p class="text-xs font-semibold text-slate-600 m-0">No transaction logs recorded yet for this item</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">Plot will update automatically when Stock IN or OUT transactions are recorded.</p>
+        </div>
+      </div>
+      <div class="modal-actions flex items-center justify-between p-3 border-t border-slate-200/70 bg-slate-50/60 rounded-b-2xl">
+        <button type="button" class="btn btn-secondary glass-btn text-xs py-1.5 px-3 flex items-center gap-1.5" id="itemGraphOpenHistoryBtn">
+          <i data-lucide="history" class="w-3.5 h-3.5 text-slate-500"></i>
+          <span>View Text Logs</span>
+        </button>
+        <button type="button" class="btn btn-secondary glass-btn-secondary text-xs py-1.5 px-4 rounded-full" id="closeItemGraphBtn">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Rename Category Modal -->
   <div id="renameCategoryModal" class="modal hidden">
     <div class="modal-backdrop glass-backdrop"></div>
