@@ -19,14 +19,15 @@ node dev-server.js
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Deployment to Vercel
-This repository is configured for zero-config Vercel deployment via `vercel.json` and `.vercelignore`:
+The build copies the static app into `dist`, which Vercel serves as the deployment output. Vercel runs this build automatically for each push to the connected GitHub repository.
+
 1. Connect your GitHub repository (`PRDSTOCK`) to Vercel.
 2. In the Vercel project configuration:
    - **Framework Preset**: Other
    - **Root Directory**: `./` (default)
-   - **Build Command**: None / empty
-   - **Output Directory**: None / empty
-3. Click **Deploy**. Vercel will serve `index.html`, `css/styles.css`, and `js/app.js` directly through its global CDN.
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+3. Click **Deploy**. Subsequent pushes to the connected branch trigger new deployments.
 
 ## Deployment to GitHub Pages
 1. Push to GitHub:
