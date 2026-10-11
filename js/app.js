@@ -2799,6 +2799,12 @@ window.setExportScope = function(scope) {
   renderExportPreview();
 };
 
+function getExportFilename(extension) {
+  const date = new Date();
+  const dateStr = `${date.getMonth() + 1}-${date.getDate()}-${date.getFullYear()}`;
+  return `NIA-${dateStr}.${extension}`;
+}
+
 function downloadExcelFile() {
   const dataset = getExportDataset();
   if (dataset.length === 0) {
@@ -2852,8 +2858,7 @@ function downloadExcelFile() {
 
     XLSX.utils.book_append_sheet(wb, ws, 'INVENTORY_STOCK');
 
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `NIA_Property_Office_Stock_Export_${dateStr}.xlsx`;
+    const filename = getExportFilename('xlsx');
 
     XLSX.writeFile(wb, filename);
 
@@ -2908,9 +2913,8 @@ function downloadCsvFile() {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const dateStr = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `NIA_Property_Office_Stock_Export_${dateStr}.csv`;
+  a.download = getExportFilename('csv');
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
