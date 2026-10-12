@@ -3115,6 +3115,10 @@ let currentItemGraphMode = 'inout'; // 'inout' or 'balance'
 let currentGraphItemKey = null;
 let currentGraphItemData = null;
 let currentGraphItemLogs = [];
+let currentGraphAllLogs = [];
+let currentGraphRangeStart = '';
+let currentGraphRangeEnd = '';
+let currentGraphRangeUserAdjusted = false;
 let itemGraphLogsRef = null;
 let itemGraphLogsHandler = null;
 
@@ -3124,6 +3128,9 @@ const closeItemGraphBtn = document.getElementById('closeItemGraphBtn');
 const btnGraphModeInOut = document.getElementById('btnGraphModeInOut');
 const btnGraphModeBalance = document.getElementById('btnGraphModeBalance');
 const itemGraphOpenHistoryBtn = document.getElementById('itemGraphOpenHistoryBtn');
+const itemGraphRangeStart = document.getElementById('itemGraphRangeStart');
+const itemGraphRangeEnd = document.getElementById('itemGraphRangeEnd');
+const itemGraphRangeSummary = document.getElementById('itemGraphRangeSummary');
 
 function stopItemGraphLogsListener() {
   if (itemGraphLogsRef && itemGraphLogsHandler) {
@@ -3154,6 +3161,82 @@ if (itemGraphOpenHistoryBtn) {
   });
 }
 
+function applyItemGraphRange() {
+  if (!currentGraphItemData) return;
+  const filteredLogs = currentGraphAllLogs.filter(log => {
+    const month = getItemGraphMonth(log);
+    return month && month >= currentGraphRangeStart && month <= currentGraphRangeEnd;
+  });
+  currentGraphItemLogs = filteredLogs;
+  updateItemGraph(currentGraphItemData, filteredLogs);
+}
+
+function getItemGraphMonth(log) {
+  const timestamp = getItemGraphLogTime(log);
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatItemGraphMonth(month) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return new Date(year, monthNumber - 1, 1).toLocaleDateString(undefined, {
+    month: 'long',
+    year: 'numeric'
+  });
+}
+
+function updateItemGraphRangeOptions(logs) {
+  const months = [...new Set(logs.map(getItemGraphMonth).filter(Boolean))].sort();
+  if (!months.length) {
+    [itemGraphRangeStart, itemGraphRangeEnd].forEach(select => {
+      if (select) select.innerHTML = '<option value="">No dated entries</option>';
+    });
+    if (itemGraphRangeSummary) itemGraphRangeSummary.textContent = 'No dated stock movements';
+    return;
+  }
+
+  const previousStart = currentGraphRangeStart;
+  const previousEnd = currentGraphRangeEnd;
+  if (!currentGraphRangeUserAdjusted) {
+    currentGraphRangeStart = months[0];
+    currentGraphRangeEnd = months[months.length - 1];
+  } else {
+    currentGraphRangeStart = months.includes(previousStart) ? previousStart : months[0];
+    currentGraphRangeEnd = months.includes(previousEnd) ? previousEnd : months[months.length - 1];
+  }
+
+  [itemGraphRangeStart, itemGraphRangeEnd].forEach(select => {
+    if (!select) return;
+    select.innerHTML = months.map(month =>
+      `<option value="${month}">${escapeHtml(formatItemGraphMonth(month))}</option>`
+    ).join('');
+  });
+  if (itemGraphRangeStart) itemGraphRangeStart.value = currentGraphRangeStart;
+  if (itemGraphRangeEnd) itemGraphRangeEnd.value = currentGraphRangeEnd;
+  if (itemGraphRangeSummary) {
+    itemGraphRangeSummary.textContent = `${months.length} month${months.length === 1 ? '' : 's'} with data`;
+  }
+}
+
+function handleItemGraphRangeChange() {
+  if (!currentGraphAllLogs.length) return;
+  currentGraphRangeUserAdjusted = true;
+  currentGraphRangeStart = itemGraphRangeStart ? itemGraphRangeStart.value : currentGraphRangeStart;
+  currentGraphRangeEnd = itemGraphRangeEnd ? itemGraphRangeEnd.value : currentGraphRangeEnd;
+  if (currentGraphRangeStart > currentGraphRangeEnd) {
+    const previousStart = currentGraphRangeStart;
+    currentGraphRangeStart = currentGraphRangeEnd;
+    currentGraphRangeEnd = previousStart;
+    if (itemGraphRangeStart) itemGraphRangeStart.value = currentGraphRangeStart;
+    if (itemGraphRangeEnd) itemGraphRangeEnd.value = currentGraphRangeEnd;
+  }
+  applyItemGraphRange();
+}
+
+if (itemGraphRangeStart) itemGraphRangeStart.addEventListener('change', handleItemGraphRangeChange);
+if (itemGraphRangeEnd) itemGraphRangeEnd.addEventListener('change', handleItemGraphRangeChange);
+
 if (btnGraphModeInOut && btnGraphModeBalance) {
   btnGraphModeInOut.addEventListener('click', () => {
     currentItemGraphMode = 'inout';
@@ -3182,6 +3265,10 @@ window.openItemGraph = function(itemKey) {
   stopItemGraphLogsListener();
   currentGraphItemKey = itemKey;
   currentGraphItemLogs = [];
+  currentGraphAllLogs = [];
+  currentGraphRangeStart = '';
+  currentGraphRangeEnd = '';
+  currentGraphRangeUserAdjusted = false;
   const item = inventoryData[itemKey];
   if (!item) return;
 
@@ -3198,6 +3285,7 @@ window.openItemGraph = function(itemKey) {
   if (itemGraphModal) itemGraphModal.classList.remove('hidden');
   refreshIcons();
 
+  updateItemGraphRangeOptions([]);
   updateItemGraph(item, currentGraphItemLogs);
 
   const logsRef = db.ref(`inventory/${itemKey}/logs`);
@@ -3217,9 +3305,10 @@ window.openItemGraph = function(itemKey) {
 
     // Sort chronologically ascending for the time-series graph
     logs.sort((a, b) => getItemGraphLogTime(a) - getItemGraphLogTime(b));
-    currentGraphItemLogs = logs;
-
-    updateItemGraph(inventoryData[itemKey] || item, logs);
+    currentGraphAllLogs = logs;
+    currentGraphItemData = inventoryData[itemKey] || item;
+    updateItemGraphRangeOptions(logs);
+    applyItemGraphRange();
   };
 
   itemGraphLogsRef = logsRef;
@@ -3403,8 +3492,8 @@ function renderItemMovementChart(item, logs) {
   let datasets = [];
 
   if (currentItemGraphMode === 'inout') {
-    const dataIn = logs.map(l => l.action === 'IN' ? (Number(l.qtyChanged) || 0) : null);
-    const dataOut = logs.map(l => l.action === 'OUT' ? (Number(l.qtyChanged) || 0) : null);
+    const dataIn = logs.map(l => l.action === 'IN' ? (Number(l.qtyChanged) || 0) : 0);
+    const dataOut = logs.map(l => l.action === 'OUT' ? (Number(l.qtyChanged) || 0) : 0);
 
     datasets = [
       {
@@ -3415,8 +3504,9 @@ function renderItemMovementChart(item, logs) {
         pointBackgroundColor: '#059669',
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2.5,
-        pointRadius: 6,
-        pointHoverRadius: 9,
+        pointRadius: 4,
+        pointHoverRadius: 7,
+        spanGaps: true,
         backgroundColor: gradIn,
         fill: true,
         tension: 0.35
@@ -3429,8 +3519,9 @@ function renderItemMovementChart(item, logs) {
         pointBackgroundColor: '#dc2626',
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2.5,
-        pointRadius: 6,
-        pointHoverRadius: 9,
+        pointRadius: 4,
+        pointHoverRadius: 7,
+        spanGaps: true,
         backgroundColor: gradOut,
         fill: true,
         tension: 0.35
@@ -3448,8 +3539,9 @@ function renderItemMovementChart(item, logs) {
         pointBackgroundColor: '#0f766e',
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2.5,
-        pointRadius: 6,
-        pointHoverRadius: 9,
+        pointRadius: 4,
+        pointHoverRadius: 7,
+        spanGaps: true,
         backgroundColor: gradBal,
         fill: true,
         tension: 0.35

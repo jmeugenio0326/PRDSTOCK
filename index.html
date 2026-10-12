@@ -862,6 +862,23 @@
           </div>
         </div>
 
+        <div class="flex flex-wrap items-center gap-2 mb-3 px-1 text-xs">
+          <span class="font-semibold text-slate-500">Data range:</span>
+          <label class="flex items-center gap-1.5">
+            <span class="text-slate-500">From</span>
+            <select id="itemGraphRangeStart" class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
+              <option value="">Loading months...</option>
+            </select>
+          </label>
+          <label class="flex items-center gap-1.5">
+            <span class="text-slate-500">To</span>
+            <select id="itemGraphRangeEnd" class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700">
+              <option value="">Loading months...</option>
+            </select>
+          </label>
+          <span id="itemGraphRangeSummary" class="text-[11px] text-slate-400"></span>
+        </div>
+
         <!-- Chart Container -->
         <div class="chart-wrapper" style="height: 280px; margin-top: 0.5rem;">
           <canvas id="itemStockMovementChart"></canvas>
