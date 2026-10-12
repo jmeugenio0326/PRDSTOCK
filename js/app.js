@@ -3243,7 +3243,7 @@ if (btnGraphModeInOut && btnGraphModeBalance) {
     btnGraphModeInOut.classList.add('active');
     btnGraphModeBalance.classList.remove('active');
     const headerEl = document.getElementById('itemGraphModeHeader');
-    if (headerEl) headerEl.textContent = 'Stock IN & OUT by Date';
+    if (headerEl) headerEl.textContent = 'Cumulative Stock IN & OUT by Date';
     if (currentGraphItemData) {
       renderItemMovementChart(currentGraphItemData, currentGraphItemLogs);
     }
@@ -3280,7 +3280,7 @@ window.openItemGraph = function(itemKey) {
   if (btnGraphModeInOut) btnGraphModeInOut.classList.add('active');
   if (btnGraphModeBalance) btnGraphModeBalance.classList.remove('active');
   const headerEl = document.getElementById('itemGraphModeHeader');
-  if (headerEl) headerEl.textContent = 'Stock IN & OUT by Date';
+  if (headerEl) headerEl.textContent = 'Cumulative Stock IN & OUT by Date';
 
   if (itemGraphModal) itemGraphModal.classList.remove('hidden');
   refreshIcons();
@@ -3426,6 +3426,7 @@ function renderItemMovementChart(item, logs) {
     gradBal.addColorStop(1, 'rgba(15, 118, 110, 0.02)');
 
     const currentDateLabel = item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : 'Current';
+    const emptyGraphMax = Math.max(1, Number(item.quantity) || 0);
 
     itemStockMovementChart = new Chart(canvas, {
       type: 'line',
@@ -3453,7 +3454,7 @@ function renderItemMovementChart(item, logs) {
         },
         scales: {
           x: { grid: { display: false } },
-          y: { beginAtZero: true, grid: { color: 'rgba(203, 213, 225, 0.5)' } }
+          y: { beginAtZero: true, max: emptyGraphMax, grid: { color: 'rgba(203, 213, 225, 0.5)' } }
         }
       }
     });
@@ -3490,14 +3491,30 @@ function renderItemMovementChart(item, logs) {
   });
 
   let datasets = [];
+  let graphAxisMax = 1;
+  let cumulativeInAtLog = [];
+  let cumulativeOutAtLog = [];
 
   if (currentItemGraphMode === 'inout') {
-    const dataIn = logs.map(l => l.action === 'IN' ? (Number(l.qtyChanged) || 0) : 0);
-    const dataOut = logs.map(l => l.action === 'OUT' ? (Number(l.qtyChanged) || 0) : 0);
+    let cumulativeIn = 0;
+    let cumulativeOut = 0;
+    const dataIn = [];
+    const dataOut = [];
+
+    logs.forEach(log => {
+      const quantity = Number(log.qtyChanged) || 0;
+      if (log.action === 'IN') cumulativeIn += quantity;
+      if (log.action === 'OUT') cumulativeOut += quantity;
+      dataIn.push(cumulativeIn);
+      dataOut.push(cumulativeOut);
+      cumulativeInAtLog.push(cumulativeIn);
+      cumulativeOutAtLog.push(cumulativeOut);
+    });
+    graphAxisMax = Math.max(1, ...dataIn, ...dataOut);
 
     datasets = [
       {
-        label: `Stock IN (Added ${item.unit || 'pcs'})`,
+        label: `Cumulative Stock IN (${item.unit || 'pcs'})`,
         data: dataIn,
         borderColor: '#059669', // Emerald
         borderWidth: 3,
@@ -3512,7 +3529,7 @@ function renderItemMovementChart(item, logs) {
         tension: 0.35
       },
       {
-        label: `Stock OUT (Issued ${item.unit || 'pcs'})`,
+        label: `Cumulative Stock OUT (${item.unit || 'pcs'})`,
         data: dataOut,
         borderColor: '#dc2626', // Red
         borderWidth: 3,
@@ -3529,6 +3546,7 @@ function renderItemMovementChart(item, logs) {
     ];
   } else {
     const dataBal = logs.map(l => Number(l.newQty) || 0);
+    graphAxisMax = Math.max(1, ...dataBal);
 
     datasets = [
       {
@@ -3598,6 +3616,10 @@ function renderItemMovementChart(item, logs) {
               if (log) {
                 const actionLabel = log.action === 'IN' ? 'Stock Added (+)' : 'Stock Issued (-)';
                 lines.push(`Action: ${actionLabel} ${log.qtyChanged} ${item.unit || 'pcs'}`);
+                if (currentItemGraphMode === 'inout') {
+                  lines.push(`Total IN: ${cumulativeInAtLog[idx]} ${item.unit || 'pcs'}`);
+                  lines.push(`Total OUT: ${cumulativeOutAtLog[idx]} ${item.unit || 'pcs'}`);
+                }
                 lines.push(`Balance after: ${log.newQty} ${item.unit || 'pcs'}`);
                 if (log.remarks) lines.push(`Note: ${log.remarks}`);
               } else {
@@ -3622,6 +3644,7 @@ function renderItemMovementChart(item, logs) {
         },
         y: {
           beginAtZero: true,
+          max: graphAxisMax,
           grid: { color: 'rgba(203, 213, 225, 0.5)' },
           ticks: {
             font: { family: 'Inter', size: 11, weight: '500' },
