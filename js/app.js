@@ -3039,7 +3039,26 @@ if (downloadCsvBtn) {
 }
 
 
+let itemHistoryLogsRef = null;
+let itemHistoryLogsHandler = null;
+let itemHistoryActivityRef = null;
+let itemHistoryActivityHandler = null;
+
+function stopItemHistoryListener() {
+  if (itemHistoryLogsRef && itemHistoryLogsHandler) {
+    itemHistoryLogsRef.off('value', itemHistoryLogsHandler);
+  }
+  if (itemHistoryActivityRef && itemHistoryActivityHandler) {
+    itemHistoryActivityRef.off('value', itemHistoryActivityHandler);
+  }
+  itemHistoryLogsRef = null;
+  itemHistoryLogsHandler = null;
+  itemHistoryActivityRef = null;
+  itemHistoryActivityHandler = null;
+}
+
 window.openItemHistory = function(itemKey) {
+  stopItemHistoryListener();
   activeContextItem = itemKey;
   const item = inventoryData[itemKey];
   if (!item) return;
@@ -3050,9 +3069,24 @@ window.openItemHistory = function(itemKey) {
   historyModal.classList.remove('hidden');
   refreshIcons();
 
-  db.ref(`inventory/${itemKey}/logs`).once('value', (snap) => {
+  const renderHistory = (itemLogs, activityLogs) => {
+    if (activeContextItem !== itemKey || historyModal.classList.contains('hidden')) return;
     const logs = [];
-    snap.forEach(c => logs.unshift(c.val()));
+    const signatures = new Set();
+    [...itemLogs, ...activityLogs].forEach(log => {
+      if (!log || !['IN', 'OUT'].includes(log.action)) return;
+      const signature = [
+        log.itemName,
+        log.date,
+        log.action,
+        log.qtyChanged,
+        log.newQty
+      ].join('|');
+      if (signatures.has(signature)) return;
+      signatures.add(signature);
+      logs.push(log);
+    });
+    logs.sort((a, b) => getItemGraphLogTime(b) - getItemGraphLogTime(a));
 
     if (logs.length === 0) {
       body.innerHTML = '<p class="text-xs text-slate-500 py-4 text-center">No transaction logs recorded yet.</p>';
@@ -3104,7 +3138,34 @@ window.openItemHistory = function(itemKey) {
       `;
     }).join('');
     refreshIcons();
-  });
+  };
+
+  let itemLogs = [];
+  let activityLogs = [];
+  const logsRef = db.ref(`inventory/${itemKey}/logs`);
+  const logsHandler = (snap) => {
+    itemLogs = [];
+    snap.forEach(child => itemLogs.push(child.val()));
+    renderHistory(itemLogs, activityLogs);
+  };
+  const activityRef = db.ref('activity_logs').limitToLast(500);
+  const activityHandler = (snap) => {
+    activityLogs = [];
+    snap.forEach(child => {
+      const log = child.val();
+      if (log && String(log.itemName || '').toLowerCase() === String(item.name || '').toLowerCase()) {
+        activityLogs.push(log);
+      }
+    });
+    renderHistory(itemLogs, activityLogs);
+  };
+
+  itemHistoryLogsRef = logsRef;
+  itemHistoryLogsHandler = logsHandler;
+  itemHistoryActivityRef = activityRef;
+  itemHistoryActivityHandler = activityHandler;
+  logsRef.on('value', logsHandler);
+  activityRef.on('value', activityHandler);
 };
 
 // ==========================================
@@ -3243,7 +3304,7 @@ if (btnGraphModeInOut && btnGraphModeBalance) {
     btnGraphModeInOut.classList.add('active');
     btnGraphModeBalance.classList.remove('active');
     const headerEl = document.getElementById('itemGraphModeHeader');
-    if (headerEl) headerEl.textContent = 'Cumulative Stock IN & OUT by Date';
+    if (headerEl) headerEl.textContent = 'Current Stock Balance by Date';
     if (currentGraphItemData) {
       renderItemMovementChart(currentGraphItemData, currentGraphItemLogs);
     }
@@ -3280,7 +3341,7 @@ window.openItemGraph = function(itemKey) {
   if (btnGraphModeInOut) btnGraphModeInOut.classList.add('active');
   if (btnGraphModeBalance) btnGraphModeBalance.classList.remove('active');
   const headerEl = document.getElementById('itemGraphModeHeader');
-  if (headerEl) headerEl.textContent = 'Cumulative Stock IN & OUT by Date';
+  if (headerEl) headerEl.textContent = 'Current Stock Balance by Date';
 
   if (itemGraphModal) itemGraphModal.classList.remove('hidden');
   refreshIcons();
@@ -3453,7 +3514,13 @@ function renderItemMovementChart(item, logs) {
           legend: { display: false }
         },
         scales: {
-          x: { grid: { display: false } },
+          x: {
+            grid: {
+              display: true,
+              color: 'rgba(148, 163, 184, 0.24)',
+              drawBorder: false
+            }
+          },
           y: { beginAtZero: true, max: emptyGraphMax, grid: { color: 'rgba(203, 213, 225, 0.5)' } }
         }
       }
@@ -3492,54 +3559,30 @@ function renderItemMovementChart(item, logs) {
 
   let datasets = [];
   let graphAxisMax = 1;
-  let cumulativeInAtLog = [];
-  let cumulativeOutAtLog = [];
 
   if (currentItemGraphMode === 'inout') {
-    let cumulativeIn = 0;
-    let cumulativeOut = 0;
-    const dataIn = [];
-    const dataOut = [];
-
-    logs.forEach(log => {
-      const quantity = Number(log.qtyChanged) || 0;
-      if (log.action === 'IN') cumulativeIn += quantity;
-      if (log.action === 'OUT') cumulativeOut += quantity;
-      dataIn.push(cumulativeIn);
-      dataOut.push(cumulativeOut);
-      cumulativeInAtLog.push(cumulativeIn);
-      cumulativeOutAtLog.push(cumulativeOut);
-    });
-    graphAxisMax = Math.max(1, ...dataIn, ...dataOut);
+    const balanceData = logs.map(log => Math.max(0, Number(log.newQty) || 0));
+    graphAxisMax = Math.max(1, ...balanceData);
 
     datasets = [
       {
-        label: `Cumulative Stock IN (${item.unit || 'pcs'})`,
-        data: dataIn,
-        borderColor: '#059669', // Emerald
+        label: `Current Stock Balance (${item.unit || 'pcs'})`,
+        data: balanceData,
+        borderColor: '#64748b',
         borderWidth: 3,
-        pointBackgroundColor: '#059669',
+        pointBackgroundColor: logs.map(log => log.action === 'IN' ? '#059669' : '#dc2626'),
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2.5,
         pointRadius: 4,
         pointHoverRadius: 7,
         spanGaps: true,
-        backgroundColor: gradIn,
-        fill: true,
-        tension: 0.35
-      },
-      {
-        label: `Cumulative Stock OUT (${item.unit || 'pcs'})`,
-        data: dataOut,
-        borderColor: '#dc2626', // Red
-        borderWidth: 3,
-        pointBackgroundColor: '#dc2626',
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 2.5,
-        pointRadius: 4,
-        pointHoverRadius: 7,
-        spanGaps: true,
-        backgroundColor: gradOut,
+        segment: {
+          borderColor: context => {
+            const action = logs[context.p1DataIndex] && logs[context.p1DataIndex].action;
+            return action === 'IN' ? '#059669' : '#dc2626';
+          }
+        },
+        backgroundColor: 'rgba(100, 116, 139, 0.08)',
         fill: true,
         tension: 0.35
       }
@@ -3550,16 +3593,22 @@ function renderItemMovementChart(item, logs) {
 
     datasets = [
       {
-        label: `Stock Balance Level (${item.unit || 'pcs'})`,
+        label: `Current Stock Balance (${item.unit || 'pcs'})`,
         data: dataBal,
         borderColor: '#003865',
         borderWidth: 3,
-        pointBackgroundColor: '#0f766e',
+        pointBackgroundColor: logs.map(log => log.action === 'IN' ? '#059669' : '#dc2626'),
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2.5,
         pointRadius: 4,
         pointHoverRadius: 7,
         spanGaps: true,
+        segment: {
+          borderColor: context => {
+            const action = logs[context.p1DataIndex] && logs[context.p1DataIndex].action;
+            return action === 'IN' ? '#059669' : '#dc2626';
+          }
+        },
         backgroundColor: gradBal,
         fill: true,
         tension: 0.35
@@ -3616,11 +3665,7 @@ function renderItemMovementChart(item, logs) {
               if (log) {
                 const actionLabel = log.action === 'IN' ? 'Stock Added (+)' : 'Stock Issued (-)';
                 lines.push(`Action: ${actionLabel} ${log.qtyChanged} ${item.unit || 'pcs'}`);
-                if (currentItemGraphMode === 'inout') {
-                  lines.push(`Total IN: ${cumulativeInAtLog[idx]} ${item.unit || 'pcs'}`);
-                  lines.push(`Total OUT: ${cumulativeOutAtLog[idx]} ${item.unit || 'pcs'}`);
-                }
-                lines.push(`Balance after: ${log.newQty} ${item.unit || 'pcs'}`);
+                lines.push(`Current balance: ${log.newQty} ${item.unit || 'pcs'}`);
                 if (log.remarks) lines.push(`Note: ${log.remarks}`);
               } else {
                 lines.push(`${context.dataset.label}: ${context.parsed.y}`);
@@ -3632,7 +3677,12 @@ function renderItemMovementChart(item, logs) {
       },
       scales: {
         x: {
-          grid: { display: false },
+          grid: {
+            display: true,
+            color: 'rgba(148, 163, 184, 0.28)',
+            drawBorder: false,
+            drawOnChartArea: true
+          },
           ticks: {
             font: { family: 'Inter', size: 10, weight: '600' },
             color: '#334155',
@@ -3745,8 +3795,14 @@ document.getElementById('ctxQuickAction').addEventListener('click', () => {
   if (activeContextItem) openQuickAdjustment(activeContextItem);
 });
 
-closeModalBtn.addEventListener('click', () => historyModal.classList.add('hidden'));
-document.querySelector('#historyModal .modal-backdrop').addEventListener('click', () => historyModal.classList.add('hidden'));
+closeModalBtn.addEventListener('click', () => {
+  historyModal.classList.add('hidden');
+  stopItemHistoryListener();
+});
+document.querySelector('#historyModal .modal-backdrop').addEventListener('click', () => {
+  historyModal.classList.add('hidden');
+  stopItemHistoryListener();
+});
 document.querySelector('#renameCategoryModal .modal-backdrop').addEventListener('click', () => renameCategoryModal.classList.add('hidden'));
 
 // ==========================================
