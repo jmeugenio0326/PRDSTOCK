@@ -98,6 +98,9 @@ const closeRenameUnitModalBtn = document.getElementById('closeRenameUnitModalBtn
 const cancelRenameUnitBtn = document.getElementById('cancelRenameUnitBtn');
 const logsTableBody = document.getElementById('logsTableBody');
 const logSearchInput = document.getElementById('logSearchInput');
+const logMonthFilter = document.getElementById('logMonthFilter');
+const logDayFilter = document.getElementById('logDayFilter');
+const clearLogFiltersBtn = document.getElementById('clearLogFiltersBtn');
 
 // State for Excel Export
 let selectedExportItemKeys = new Set();
@@ -844,6 +847,7 @@ function initDataListeners() {
     snap.forEach(child => {
       logsData.unshift(child.val());
     });
+    updateLogDateFilters(logsData);
     renderLogs(logsData);
     updateDashboard();
   });
@@ -2854,18 +2858,23 @@ function downloadExcelFile() {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-    // Apply auto-fit column widths
-    ws['!cols'] = [
-      { wch: 12 }, // Quantity
-      { wch: 10 }, // UNIT
-      { wch: 36 }, // DESCRIPTION(ITEM)
-      { wch: 24 }, // Property NO.
-      { wch: 22 }, // SERIAL NO.
-      { wch: 12 }, // YEAR
-      { wch: 15 }, // PRICE
-      { wch: 18 }, // VALUE
-      { wch: 32 }  // REMARK
-    ];
+    // Fit columns and rows to the longest exported value without allowing
+    // unusually long remarks to make the sheet impractically wide.
+    ws['!cols'] = headers.map((header, columnIndex) => {
+      const longest = Math.max(
+        String(header).length,
+        ...rows.map(row => String(row[columnIndex] ?? '').length)
+      );
+      return { wch: Math.min(Math.max(longest + 2, 10), 42) };
+    });
+    ws['!rows'] = aoa.map((row, rowIndex) => {
+      const lineCount = row.reduce((maxLines, value, columnIndex) => {
+        const width = ws['!cols'][columnIndex].wch;
+        const lines = Math.max(1, Math.ceil(String(value ?? '').length / width));
+        return Math.max(maxLines, lines);
+      }, 1);
+      return { hpt: rowIndex === 0 ? 24 : Math.min(18 * lineCount, 72) };
+    });
 
     XLSX.utils.book_append_sheet(wb, ws, 'INVENTORY_STOCK');
 
@@ -3811,11 +3820,14 @@ document.querySelector('#renameCategoryModal .modal-backdrop').addEventListener(
 function renderLogs(logs) {
   const filter = logSearchInput.value.toLowerCase().trim();
   const filtered = logs.filter(l =>
-    (l.itemName && l.itemName.toLowerCase().includes(filter)) ||
-    (l.remarks && l.remarks.toLowerCase().includes(filter)) ||
-    (l.propertyNo && l.propertyNo.toLowerCase().includes(filter)) ||
-    (l.serialNo && l.serialNo.toLowerCase().includes(filter)) ||
-    (l.year && l.year.toString().toLowerCase().includes(filter))
+    (!logMonthFilter.value || getLogMonth(l) === logMonthFilter.value) &&
+    (!logDayFilter.value || getLogDay(l) === logDayFilter.value) &&
+    (!filter ||
+      (l.itemName && l.itemName.toLowerCase().includes(filter)) ||
+      (l.remarks && l.remarks.toLowerCase().includes(filter)) ||
+      (l.propertyNo && l.propertyNo.toLowerCase().includes(filter)) ||
+      (l.serialNo && l.serialNo.toLowerCase().includes(filter)) ||
+      (l.year && l.year.toString().toLowerCase().includes(filter)))
   );
 
   if (filtered.length === 0) {
@@ -3855,7 +3867,57 @@ function renderLogs(logs) {
   `).join('');
 }
 
-logSearchInput.addEventListener('input', () => renderLogs(logsData));
+function getLogDate(log) {
+  const date = new Date(log.date);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getLogMonth(log) {
+  const date = getLogDate(log);
+  return date ? String(date.getMonth() + 1).padStart(2, '0') : '';
+}
+
+function getLogDay(log) {
+  const date = getLogDate(log);
+  return date ? String(date.getDate()).padStart(2, '0') : '';
+}
+
+function updateLogDateFilters(logs) {
+  const activeMonth = logMonthFilter.value;
+  const activeDay = logDayFilter.value;
+  const months = [...new Set(logs.map(getLogMonth).filter(Boolean))].sort();
+  const days = [...new Set(logs.map(getLogDay).filter(Boolean))].sort();
+
+  logMonthFilter.innerHTML = '<option value="">All months</option>' +
+    months.map(month => {
+      const label = new Date(2000, Number(month) - 1, 1).toLocaleDateString(undefined, { month: 'long' });
+      return `<option value="${month}">${escapeHtml(label)}</option>`;
+    }).join('');
+  logDayFilter.innerHTML = '<option value="">All days</option>' +
+    days.map(day => `<option value="${day}">${Number(day)}</option>`).join('');
+
+  logMonthFilter.value = months.includes(activeMonth) ? activeMonth : '';
+  logDayFilter.value = days.includes(activeDay) ? activeDay : '';
+}
+
+if (logSearchInput) {
+  logSearchInput.addEventListener('input', () => renderLogs(logsData));
+}
+if (logMonthFilter) {
+  logMonthFilter.addEventListener('change', () => renderLogs(logsData));
+}
+if (logDayFilter) {
+  logDayFilter.addEventListener('change', () => renderLogs(logsData));
+}
+if (clearLogFiltersBtn) {
+  clearLogFiltersBtn.addEventListener('click', () => {
+    logSearchInput.value = '';
+    logMonthFilter.value = '';
+    logDayFilter.value = '';
+    renderLogs(logsData);
+  });
+}
+
 dbSearchInput.addEventListener('input', renderInventory);
 dbCategoryFilter.addEventListener('change', renderInventory);
 dbStatusFilter.addEventListener('change', renderInventory);

@@ -662,7 +662,18 @@
         <div class="card glass-panel">
           <div class="card-header-flex">
             <h2><i data-lucide="history" class="w-5 h-5 inline mr-1"></i> Transaction Audit Log</h2>
-            <input type="text" id="logSearchInput" class="compact-search glass-input" placeholder="Search logs..." autocomplete="off">
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <input type="text" id="logSearchInput" class="compact-search glass-input" placeholder="Search logs..." autocomplete="off">
+              <select id="logMonthFilter" class="compact-search glass-input" aria-label="Filter logs by month">
+                <option value="">All months</option>
+              </select>
+              <select id="logDayFilter" class="compact-search glass-input" aria-label="Filter logs by day">
+                <option value="">All days</option>
+              </select>
+              <button type="button" id="clearLogFiltersBtn" class="btn btn-secondary glass-btn text-xs py-1.5 px-2.5">
+                Clear
+              </button>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="data-table glass-table">
