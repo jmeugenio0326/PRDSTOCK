@@ -836,6 +836,7 @@ function initDataListeners() {
   db.ref('inventory').on('value', (snap) => {
     inventoryData = snap.val() || {};
     refreshAllViews();
+    syncOpenItemGraphItem();
   });
 
   db.ref('activity_logs').limitToLast(100).on('value', (snap) => {
@@ -2201,7 +2202,7 @@ stockForm.addEventListener('submit', (e) => {
     `,
     confirmText: 'Record Stock',
     confirmBtnClass: 'btn-primary',
-    onConfirm: () => {
+    onConfirm: async () => {
       const timestamp = new Date().toISOString();
       const logEntry = {
         date: timestamp,
@@ -2258,14 +2259,24 @@ stockForm.addEventListener('submit', (e) => {
         updatedItem.remarks = existing.remarks;
       }
 
-      // 1. Optimistic Immediate Update
-      inventoryData[itemKey] = updatedItem;
-      logsData.unshift(logEntry);
+      const itemLogRef = db.ref(`inventory/${itemKey}/logs`).push();
+      const activityLogRef = db.ref('activity_logs').push();
+      const updates = {};
+      Object.entries(updatedItem).forEach(([field, value]) => {
+        updates[`inventory/${itemKey}/${field}`] = value;
+      });
+      updates[`inventory/${itemKey}/logs/${itemLogRef.key}`] = logEntry;
+      updates[`activity_logs/${activityLogRef.key}`] = logEntry;
 
-      // 2. Persist to Firebase Realtime Database
-      db.ref(`inventory/${itemKey}`).update(updatedItem);
-      db.ref(`inventory/${itemKey}/logs`).push(logEntry);
-      db.ref('activity_logs').push(logEntry);
+      try {
+        await db.ref().update(updates);
+      } catch (error) {
+        showToast(`Stock movement could not be saved: ${error.message}`, 'error', 'Save Failed');
+        return;
+      }
+
+      inventoryData[itemKey] = { ...(inventoryData[itemKey] || {}), ...updatedItem };
+      logsData.unshift(logEntry);
 
       // 3. Clear form and trigger auto-refresh across system
       resetStockForm();
@@ -3104,6 +3115,8 @@ let currentItemGraphMode = 'inout'; // 'inout' or 'balance'
 let currentGraphItemKey = null;
 let currentGraphItemData = null;
 let currentGraphItemLogs = [];
+let itemGraphLogsRef = null;
+let itemGraphLogsHandler = null;
 
 const itemGraphModal = document.getElementById('itemGraphModal');
 const closeItemGraphModalBtn = document.getElementById('closeItemGraphModalBtn');
@@ -3112,12 +3125,25 @@ const btnGraphModeInOut = document.getElementById('btnGraphModeInOut');
 const btnGraphModeBalance = document.getElementById('btnGraphModeBalance');
 const itemGraphOpenHistoryBtn = document.getElementById('itemGraphOpenHistoryBtn');
 
+function stopItemGraphLogsListener() {
+  if (itemGraphLogsRef && itemGraphLogsHandler) {
+    itemGraphLogsRef.off('value', itemGraphLogsHandler);
+  }
+  itemGraphLogsRef = null;
+  itemGraphLogsHandler = null;
+}
+
 function closeItemGraphModal() {
   if (itemGraphModal) itemGraphModal.classList.add('hidden');
+  stopItemGraphLogsListener();
 }
 
 if (closeItemGraphModalBtn) closeItemGraphModalBtn.addEventListener('click', closeItemGraphModal);
 if (closeItemGraphBtn) closeItemGraphBtn.addEventListener('click', closeItemGraphModal);
+if (itemGraphModal) {
+  const backdrop = itemGraphModal.querySelector('.modal-backdrop');
+  if (backdrop) backdrop.addEventListener('click', closeItemGraphModal);
+}
 
 if (itemGraphOpenHistoryBtn) {
   itemGraphOpenHistoryBtn.addEventListener('click', () => {
@@ -3153,21 +3179,14 @@ if (btnGraphModeInOut && btnGraphModeBalance) {
 }
 
 window.openItemGraph = function(itemKey) {
+  stopItemGraphLogsListener();
   currentGraphItemKey = itemKey;
+  currentGraphItemLogs = [];
   const item = inventoryData[itemKey];
   if (!item) return;
-  currentGraphItemData = item;
 
   const titleEl = document.getElementById('itemGraphModalTitle');
-  const subtitleEl = document.getElementById('itemGraphModalSubtitle');
-  const balEl = document.getElementById('graphItemCurrentBal');
-  const inEl = document.getElementById('graphItemTotalIn');
-  const outEl = document.getElementById('graphItemTotalOut');
-  const txEl = document.getElementById('graphItemTxCount');
-
   if (titleEl) titleEl.textContent = `${item.name}`;
-  if (subtitleEl) subtitleEl.textContent = `${item.category || 'General'} • Available Stock: ${item.quantity} ${item.unit || 'pcs'}`;
-  if (balEl) balEl.textContent = `${item.quantity} ${item.unit || 'pcs'}`;
 
   // Default to IN & OUT mode
   currentItemGraphMode = 'inout';
@@ -3179,35 +3198,124 @@ window.openItemGraph = function(itemKey) {
   if (itemGraphModal) itemGraphModal.classList.remove('hidden');
   refreshIcons();
 
-  // Fetch logs
-  db.ref(`inventory/${itemKey}/logs`).once('value', (snap) => {
+  updateItemGraph(item, currentGraphItemLogs);
+
+  const logsRef = db.ref(`inventory/${itemKey}/logs`);
+  const logsHandler = (snap) => {
+    if (currentGraphItemKey !== itemKey) return;
+
     let logs = [];
-    snap.forEach(c => logs.push(c.val()));
+    snap.forEach(child => {
+      const log = child.val();
+      if (log && typeof log === 'object') logs.push(log);
+    });
 
     // Fallback: check global logsData matching item name
     if (logs.length === 0 && Array.isArray(logsData)) {
-      logs = logsData.filter(l => l.itemName && l.itemName.toLowerCase() === item.name.toLowerCase());
+      logs = logsData.filter(l => l && String(l.itemName || '').toLowerCase() === item.name.toLowerCase());
     }
 
     // Sort chronologically ascending for the time-series graph
-    logs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    logs.sort((a, b) => getItemGraphLogTime(a) - getItemGraphLogTime(b));
     currentGraphItemLogs = logs;
 
-    let totalIn = 0;
-    let totalOut = 0;
-    logs.forEach(l => {
-      const q = Number(l.qtyChanged) || 0;
-      if (l.action === 'IN') totalIn += q;
-      else if (l.action === 'OUT') totalOut += q;
-    });
+    updateItemGraph(inventoryData[itemKey] || item, logs);
+  };
 
-    if (inEl) inEl.textContent = `+${totalIn} ${item.unit || 'pcs'}`;
-    if (outEl) outEl.textContent = `-${totalOut} ${item.unit || 'pcs'}`;
-    if (txEl) txEl.textContent = `${logs.length}`;
-
-    renderItemMovementChart(item, logs);
+  itemGraphLogsRef = logsRef;
+  itemGraphLogsHandler = logsHandler;
+  logsRef.on('value', logsHandler, (error) => {
+    if (itemGraphLogsRef !== logsRef || currentGraphItemKey !== itemKey) return;
+    const body = document.getElementById('itemGraphTransactionsBody');
+    if (body) {
+      body.innerHTML = `<tr><td colspan="3" class="px-3 py-3 text-center text-red-600">Unable to load movement history: ${escapeHtml(error.message)}</td></tr>`;
+    }
+    showToast('Unable to load this item’s stock movement history.', 'error', 'History Load Failed');
   });
 };
+
+function getItemGraphLogTime(log) {
+  const timestamp = Date.parse(log.date);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function updateItemGraph(item, logs) {
+  if (!item) return;
+  currentGraphItemData = item;
+
+  const subtitleEl = document.getElementById('itemGraphModalSubtitle');
+  const balEl = document.getElementById('graphItemCurrentBal');
+  const inEl = document.getElementById('graphItemTotalIn');
+  const outEl = document.getElementById('graphItemTotalOut');
+  const txEl = document.getElementById('graphItemTxCount');
+  const unit = item.unit || 'pcs';
+
+  if (subtitleEl) subtitleEl.textContent = `${item.category || 'General'} • Available Stock: ${item.quantity} ${unit}`;
+  if (balEl) balEl.textContent = `${item.quantity} ${unit}`;
+
+  let totalIn = 0;
+  let totalOut = 0;
+  logs.forEach(log => {
+    const quantity = Number(log.qtyChanged) || 0;
+    if (log.action === 'IN') totalIn += quantity;
+    else if (log.action === 'OUT') totalOut += quantity;
+  });
+
+  if (inEl) inEl.textContent = `+${totalIn} ${unit}`;
+  if (outEl) outEl.textContent = `-${totalOut} ${unit}`;
+  if (txEl) txEl.textContent = `${logs.length}`;
+
+  renderItemGraphTransactions(item, logs);
+  renderItemMovementChart(item, logs);
+}
+
+function syncOpenItemGraphItem() {
+  if (!currentGraphItemKey || !itemGraphModal || itemGraphModal.classList.contains('hidden')) return;
+  const item = inventoryData[currentGraphItemKey];
+  if (!item) {
+    closeItemGraphModal();
+    return;
+  }
+  updateItemGraph(item, currentGraphItemLogs);
+}
+
+function renderItemGraphTransactions(item, logs) {
+  const body = document.getElementById('itemGraphTransactionsBody');
+  if (!body) return;
+
+  if (!logs.length) {
+    body.innerHTML = '<tr><td colspan="3" class="px-3 py-3 text-center text-slate-400">No stock movements recorded for this item.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = [...logs].reverse().map(log => {
+    const date = new Date(log.date);
+    const dateText = Number.isNaN(date.getTime())
+      ? 'Date unavailable'
+      : date.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    const isIn = log.action === 'IN';
+    const action = isIn ? 'Stock IN' : 'Stock OUT';
+    const quantity = Number(log.qtyChanged) || 0;
+    const balance = log.newQty === null || log.newQty === undefined || log.newQty === ''
+      ? '—'
+      : `${log.newQty} ${log.unit || item.unit || 'pcs'}`;
+
+    return `
+      <tr>
+        <td class="whitespace-nowrap px-3 py-2 text-slate-600">${escapeHtml(dateText)}</td>
+        <td class="whitespace-nowrap px-3 py-2 font-semibold ${isIn ? 'text-emerald-700' : 'text-amber-700'}">${action} ${isIn ? '+' : '-'}${escapeHtml(quantity)} ${escapeHtml(log.unit || item.unit || 'pcs')}</td>
+        <td class="whitespace-nowrap px-3 py-2 text-right font-medium text-slate-700">${escapeHtml(balance)}</td>
+      </tr>
+    `;
+  }).join('');
+}
 
 function renderItemMovementChart(item, logs) {
   const canvas = document.getElementById('itemStockMovementChart');
@@ -3286,18 +3394,17 @@ function renderItemMovementChart(item, logs) {
   // Formatted date labels for X-axis
   const labels = logs.map(l => {
     const d = new Date(l.date);
-    const m = d.getMonth() + 1;
-    const day = d.getDate();
-    const hours = d.getHours();
-    const mins = String(d.getMinutes()).padStart(2, '0');
-    return `${m}/${day} ${hours}:${mins}`;
+    if (Number.isNaN(d.getTime())) return 'Unknown date';
+    const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+    const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return `${date} ${time}`;
   });
 
   let datasets = [];
 
   if (currentItemGraphMode === 'inout') {
-    const dataIn = logs.map(l => l.action === 'IN' ? (Number(l.qtyChanged) || 0) : 0);
-    const dataOut = logs.map(l => l.action === 'OUT' ? (Number(l.qtyChanged) || 0) : 0);
+    const dataIn = logs.map(l => l.action === 'IN' ? (Number(l.qtyChanged) || 0) : null);
+    const dataOut = logs.map(l => l.action === 'OUT' ? (Number(l.qtyChanged) || 0) : null);
 
     datasets = [
       {
